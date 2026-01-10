@@ -45,36 +45,19 @@ function App() {
     <ErrorBoundary>
       <ThemeProvider theme={theme}>
         <CssBaseline />
-        <Router>
+        <Router basename="/Control-Facturas-Vite">
           <div className="min-h-screen bg-gray-50">
             <Routes>
-              <Route 
-                path="/login" 
-                element={user ? <Navigate to="/" /> : <LoginScreen />} 
-              />
-              <Route 
-                path="/" 
-                element={user ? <InvoiceListScreen /> : <Navigate to="/login" />} 
-              />
-              <Route 
-                path="/capture" 
-                element={user ? <InvoiceCaptureScreen /> : <Navigate to="/login" />} 
-              />
-              <Route 
-                path="/quick-delivery/:invoiceId" 
-                element={user ? <QuickDeliveryScreen /> : <Navigate to="/login" />} 
-              />
-              <Route 
-                path="/invoice/:id" 
-                element={user ? <InvoiceDetailScreen /> : <Navigate to="/login" />} 
-              />
-              <Route 
-                path="/admin" 
-                element={user ? <AdminPanelScreen /> : <Navigate to="/login" />} 
-              />
+              <Route path="/login" element={user ? <Navigate to="/" /> : <LoginScreen />} />
+              <Route path="/" element={user ? <InvoiceListScreen /> : <Navigate to="/login" />} />
+              <Route path="/capture" element={user ? <InvoiceCaptureScreen /> : <Navigate to="/login" />} />
+              <Route path="/quick-delivery/:invoiceId" element={user ? <QuickDeliveryScreen /> : <Navigate to="/login" />} />
+              <Route path="/invoice/:id" element={user ? <InvoiceDetailScreen /> : <Navigate to="/login" />} />
+              <Route path="/admin" element={user ? <AdminPanelScreen /> : <Navigate to="/login" />} />
             </Routes>
           </div>
         </Router>
+
       </ThemeProvider>
     </ErrorBoundary>
   );

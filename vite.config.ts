@@ -6,7 +6,7 @@ export default defineConfig({
   server: {
     port: 3000,
   },
-  base: '/Control-Facturas/', // Cambia esto
+  base: '/Control-Facturas-Vite/',
   build: {
     outDir: 'dist',
     sourcemap: true,
