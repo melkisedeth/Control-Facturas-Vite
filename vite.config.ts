@@ -7,7 +7,7 @@ export default defineConfig({
     port: 3000,
   },
   // Cambia esto según tu repositorio
-  base: '/Control-Facturas/', // Solo el nombre del repositorio
+  base: 'https://melkisedeth.github.io/Control-Facturas-Vite/', // Solo el nombre del repositorio
   build: {
     outDir: 'dist',
     sourcemap: true,
