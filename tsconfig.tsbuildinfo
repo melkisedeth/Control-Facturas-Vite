@@ -1,0 +1,1 @@
+{"root":["./src/app.tsx","./src/main.tsx","./src/components/errorboundary.tsx","./src/components/invoicecapturescreen.tsx","./src/components/invoicelistscreen.tsx","./src/firebase/config.ts","./src/types/invoice.ts"],"errors":true,"version":"5.9.3"}
