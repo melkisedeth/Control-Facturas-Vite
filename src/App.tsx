@@ -12,6 +12,7 @@ import InvoiceDetailScreen from './components/InvoiceDetailScreen';
 import AdminPanelScreen from './components/AdminPanelScreen';
 import LoginScreen from './components/LoginScreen';
 import LoadingScreen from './components/LoadingScreen';
+import ClientsScreen from './components/ClientsScreen';
 
 const theme = createTheme({
   palette: {
@@ -54,6 +55,7 @@ function App() {
               <Route path="/quick-delivery/:invoiceId" element={user ? <QuickDeliveryScreen /> : <Navigate to="/login" />} />
               <Route path="/invoice/:id" element={user ? <InvoiceDetailScreen /> : <Navigate to="/login" />} />
               <Route path="/admin" element={user ? <AdminPanelScreen /> : <Navigate to="/login" />} />
+              <Route path="/clients" element={user ? <ClientsScreen /> : <Navigate to="/login" />} />
             </Routes>
           </div>
         </Router>

@@ -8,8 +8,10 @@ export interface Delivery {
 export interface Invoice {
   id?: string;
   invoiceNumber: string;
+  clientId?: string; // Nuevo campo
   clientName: string;
   clientPhone: string;
+  clientEmail?: string; // Nuevo campo
   clientAddress?: string;
   status: 'Pendiente' | 'Parcial' | 'Despachada';
   photos: string[];

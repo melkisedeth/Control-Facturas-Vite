@@ -27,17 +27,25 @@ import {
   Avatar,
   Divider,
   Paper,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
   Badge,
   InputAdornment,
   Container,
   Stack,
   alpha,
+  Tooltip,
+  List,
+  ListItem,
+  ListItemText,
+  ListItemAvatar,
+  ListItemButton,
+  Alert,
+  LinearProgress,
+  SpeedDial,
+  SpeedDialAction,
+  SpeedDialIcon,
+  Fade,
+  Zoom,
+  Drawer,
 } from '@mui/material';
 import {
   Search as SearchIcon,
@@ -52,6 +60,21 @@ import {
   Person as PersonIcon,
   FilterList as FilterIcon,
   Refresh as RefreshIcon,
+  CheckCircle as CheckCircleIcon,
+  Pending as PendingIcon,
+  Inventory as InventoryIcon,
+  FileCopy as FileCopyIcon,
+  PhotoCamera as PhotoCameraIcon,
+  MoreVert as MoreVertIcon,
+  QrCode as QrCodeIcon,
+  CloudUpload as CloudUploadIcon,
+  Sort as SortIcon,
+  Assignment as AssignmentIcon,
+  Group as GroupIcon,
+  Dashboard as DashboardIcon,
+  Download as DownloadIcon,
+  Print as PrintIcon,
+  Share as ShareIcon,
 } from '@mui/icons-material';
 
 const InvoiceListScreenDesktop: React.FC = () => {
@@ -63,22 +86,26 @@ const InvoiceListScreenDesktop: React.FC = () => {
   const [isAdmin, setIsAdmin] = useState(false);
   const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  const [sortBy, setSortBy] = useState<'date' | 'status' | 'client'>('date');
+  const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
+  const [quickActionsOpen, setQuickActionsOpen] = useState(false);
+  const [stats, setStats] = useState({
+    pending: 0,
+    delivered: 0,
+    partial: 0,
+    total: 0,
+  });
+
   const open = Boolean(anchorEl);
 
   useEffect(() => {
     const auth = getAuth();
-    
+
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
         setCurrentUserEmail(user.email);
-        
-        if (user.email === 'admin@gmail.com') {
-          setIsAdmin(true);
-          localStorage.setItem('isAdmin', 'true');
-        } else {
-          setIsAdmin(false);
-          localStorage.setItem('isAdmin', 'false');
-        }
+        setIsAdmin(user.email === 'admin@gmail.com');
+        localStorage.setItem('isAdmin', (user.email === 'admin@gmail.com').toString());
       } else {
         setCurrentUserEmail(null);
         setIsAdmin(false);
@@ -92,16 +119,30 @@ const InvoiceListScreenDesktop: React.FC = () => {
     return () => unsubscribe();
   }, [navigate]);
 
+  useEffect(() => {
+    // Actualizar estadísticas cuando cambian las facturas
+    const pending = invoices.filter(inv => inv.status === 'Pendiente').length;
+    const delivered = invoices.filter(inv => inv.status === 'Despachada').length;
+    const partial = invoices.filter(inv => inv.status === 'Parcial').length;
+    
+    setStats({
+      pending,
+      delivered,
+      partial,
+      total: invoices.length,
+    });
+  }, [invoices]);
+
   const fetchInvoices = async () => {
     try {
       setLoading(true);
       const q = query(
         collection(db, 'invoices'),
         orderBy('createdAt', 'desc'),
-        limit(100)
+        limit(200)
       );
       const snapshot = await getDocs(q);
-      
+
       const invoicesList: Invoice[] = [];
       snapshot.forEach((doc) => {
         const data = doc.data();
@@ -120,7 +161,7 @@ const InvoiceListScreenDesktop: React.FC = () => {
           userId: data.userId,
         });
       });
-      
+
       setInvoices(invoicesList);
     } catch (error) {
       console.error('Error fetching invoices:', error);
@@ -137,36 +178,55 @@ const InvoiceListScreenDesktop: React.FC = () => {
     }
   };
 
-  const getStatusText = (status: string) => {
+  const getStatusIcon = (status: string) => {
     switch (status) {
-      case 'Despachada': return 'Despachada';
-      case 'Parcial': return 'Parcial';
-      default: return 'Pendiente';
+      case 'Despachada': return <CheckCircleIcon fontSize="small" />;
+      case 'Parcial': return <InventoryIcon fontSize="small" />;
+      default: return <PendingIcon fontSize="small" />;
     }
   };
 
-  const getPendingInvoices = () => {
-    return invoices.filter(invoice => invoice.status !== 'Despachada');
+  const getFilteredInvoices = () => {
+    let filtered = invoices;
+    
+    // Filtrar por tab
+    if (tabIndex === 0) {
+      filtered = filtered.filter(inv => inv.status !== 'Despachada');
+    } else {
+      filtered = filtered.filter(inv => inv.status === 'Despachada');
+    }
+    
+    // Filtrar por búsqueda
+    if (search) {
+      const searchLower = search.toLowerCase();
+      filtered = filtered.filter((invoice) =>
+        invoice.invoiceNumber.toLowerCase().includes(searchLower) ||
+        invoice.clientName.toLowerCase().includes(searchLower) ||
+        invoice.clientPhone.includes(search) ||
+        (invoice.userEmail?.toLowerCase().includes(searchLower) ?? false)
+      );
+    }
+    
+    // Ordenar
+    filtered.sort((a, b) => {
+      switch (sortBy) {
+        case 'date':
+          return b.createdAt.getTime() - a.createdAt.getTime();
+        case 'client':
+          return a.clientName.localeCompare(b.clientName);
+        case 'status':
+          return a.status.localeCompare(b.status);
+        default:
+          return 0;
+      }
+    });
+    
+    return filtered;
   };
-
-  const getDeliveredInvoices = () => {
-    return invoices.filter(invoice => invoice.status === 'Despachada');
-  };
-
-  const filteredInvoices = tabIndex === 0 ? getPendingInvoices() : getDeliveredInvoices();
-
-  const searchFilteredInvoices = filteredInvoices.filter((invoice) => {
-    return search === '' ? true :
-      invoice.invoiceNumber.toLowerCase().includes(search.toLowerCase()) ||
-      invoice.clientName.toLowerCase().includes(search.toLowerCase()) ||
-      invoice.clientPhone.includes(search);
-  });
 
   const handleQuickDelivery = (invoice: Invoice) => {
     if (invoice.id) {
       navigate(`/quick-delivery/${invoice.id}`);
-    } else {
-      console.error('Invoice ID is undefined');
     }
   };
 
@@ -182,6 +242,11 @@ const InvoiceListScreenDesktop: React.FC = () => {
 
   const handleAdminPanel = () => {
     navigate('/admin');
+    handleCloseMenu();
+  };
+
+  const handleClientsPanel = () => {
+    navigate('/clients');
     handleCloseMenu();
   };
 
@@ -208,74 +273,151 @@ const InvoiceListScreenDesktop: React.FC = () => {
     return email.charAt(0).toUpperCase();
   };
 
-  const pendingCount = getPendingInvoices().length;
-  const deliveredCount = getDeliveredInvoices().length;
+  const formatDate = (date: Date) => {
+    return format(date, 'dd MMM yyyy HH:mm', { locale: es });
+  };
+
+  const getPriorityColor = (invoice: Invoice) => {
+    const daysDiff = Math.floor((new Date().getTime() - invoice.createdAt.getTime()) / (1000 * 3600 * 24));
+    if (daysDiff > 7) return '#ff6b6b';
+    if (daysDiff > 3) return '#ffa726';
+    return '#66bb6a';
+  };
+
+  const handleExportData = () => {
+    // Función para exportar datos
+    console.log('Exportando datos...');
+  };
+
+  const handlePrintList = () => {
+    // Función para imprimir lista
+    window.print();
+  };
+
+  const quickActions = [
+    { icon: <AddIcon />, name: 'Nueva Factura', action: handleAddInvoice },
+    { icon: <GroupIcon />, name: 'Clientes', action: handleClientsPanel },
+    { icon: <DownloadIcon />, name: 'Exportar', action: handleExportData },
+    { icon: <PrintIcon />, name: 'Imprimir', action: handlePrintList },
+  ];
+
+  const filteredInvoices = getFilteredInvoices();
 
   return (
-    <Box sx={{ minHeight: '100vh', bgcolor: 'grey.50' }}>
-      {/* Header */}
-      <AppBar 
-        position="sticky" 
-        elevation={0}
-        sx={{ 
+    <Box sx={{ 
+      minHeight: '100vh', 
+      bgcolor: 'grey.50',
+      background: 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)'
+    }}>
+      {/* Header Mejorado */}
+      <AppBar
+        position="sticky"
+        elevation={1}
+        sx={{
           bgcolor: 'background.paper',
           borderBottom: 1,
-          borderColor: 'divider'
+          borderColor: 'divider',
+          backdropFilter: 'blur(10px)',
+          background: 'rgba(255, 255, 255, 0.95)'
         }}
       >
-        <Toolbar sx={{ px: { xs: 2, md: 4 } }}>
-          <Typography 
-            variant="h6" 
-            sx={{ 
-              flexGrow: 1,
-              fontWeight: 700,
-              color: 'primary.main',
-              fontSize: '1.5rem'
-            }}
-          >
-            Control Facturas - Entregas
-          </Typography>
-          
-          <Stack direction="row" spacing={2} alignItems="center">
-            {/* Botón Admin para pantallas grandes */}
-            {isAdmin && (
-              <Button
-                variant="outlined"
-                startIcon={<AdminIcon />}
-                onClick={handleAdminPanel}
-                sx={{ display: { xs: 'none', md: 'flex' } }}
-              >
-                Admin
-              </Button>
-            )}
-            
-            {/* Email del usuario */}
-            {currentUserEmail && (
-              <Typography 
-                variant="body2" 
-                sx={{ 
-                  display: { xs: 'none', md: 'block' },
-                  color: 'text.secondary'
+        <Toolbar sx={{ px: { xs: 2, md: 4 }, py: 1.5 }}>
+          <Stack direction="row" alignItems="center" spacing={2} sx={{ flexGrow: 1 }}>
+            <Box sx={{ 
+              width: 40, 
+              height: 40, 
+              bgcolor: 'primary.main', 
+              borderRadius: 2,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}>
+              <AssignmentIcon sx={{ color: 'white' }} />
+            </Box>
+            <Box>
+              <Typography
+                variant="h6"
+                sx={{
+                  fontWeight: 700,
+                  color: 'text.primary',
+                  fontSize: '1.3rem'
                 }}
               >
-                {currentUserEmail}
+                Gestión de Facturas
               </Typography>
-            )}
+              <Typography variant="caption" color="text.secondary">
+                Control de entregas y despachos
+              </Typography>
+            </Box>
+          </Stack>
+
+          {/* Estadísticas rápidas */}
+          <Stack direction="row" spacing={3} sx={{ display: { xs: 'none', lg: 'flex' }, mr: 4 }}>
+            <Tooltip title="Facturas Pendientes">
+              <Stack alignItems="center" spacing={0.5}>
+                <Badge badgeContent={stats.pending} color="error" max={99}>
+                  <PendingIcon color="action" />
+                </Badge>
+                <Typography variant="caption" color="text.secondary">
+                  Pendientes
+                </Typography>
+              </Stack>
+            </Tooltip>
             
-            {/* Avatar y menú */}
+            <Tooltip title="Facturas Parciales">
+              <Stack alignItems="center" spacing={0.5}>
+                <Badge badgeContent={stats.partial} color="warning" max={99}>
+                  <InventoryIcon color="action" />
+                </Badge>
+                <Typography variant="caption" color="text.secondary">
+                  Parciales
+                </Typography>
+              </Stack>
+            </Tooltip>
+            
+            <Tooltip title="Facturas Despachadas">
+              <Stack alignItems="center" spacing={0.5}>
+                <Badge badgeContent={stats.delivered} color="success" max={99}>
+                  <CheckCircleIcon color="action" />
+                </Badge>
+                <Typography variant="caption" color="text.secondary">
+                  Despachadas
+                </Typography>
+              </Stack>
+            </Tooltip>
+          </Stack>
+
+          {/* Avatar y menú */}
+          <Stack direction="row" spacing={2} alignItems="center">
+            <Tooltip title="Acciones rápidas">
+              <IconButton
+                size="small"
+                onClick={() => setQuickActionsOpen(!quickActionsOpen)}
+                sx={{
+                  bgcolor: 'primary.main',
+                  color: 'white',
+                  '&:hover': {
+                    bgcolor: 'primary.dark',
+                  }
+                }}
+              >
+                <SpeedDialIcon />
+              </IconButton>
+            </Tooltip>
+
             <IconButton
               onClick={handleMenuClick}
               size="small"
-              sx={{ 
+              sx={{
                 border: 1,
                 borderColor: 'divider',
                 bgcolor: 'background.paper'
               }}
             >
-              <Avatar 
-                sx={{ 
-                  width: 32, 
-                  height: 32,
+              <Avatar
+                sx={{
+                  width: 36,
+                  height: 36,
                   bgcolor: 'primary.main',
                   fontSize: '0.875rem'
                 }}
@@ -293,423 +435,530 @@ const InvoiceListScreenDesktop: React.FC = () => {
             PaperProps={{
               sx: {
                 mt: 1.5,
-                minWidth: 200,
+                minWidth: 240,
+                borderRadius: 2,
+                boxShadow: 3
               }
             }}
           >
-            <MenuItem disabled>
+            <MenuItem disabled sx={{ opacity: 1 }}>
               <Stack spacing={0.5}>
-                <Typography variant="body2" color="text.secondary">
+                <Typography variant="body2" fontWeight={500}>
                   {currentUserEmail}
                 </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  {isAdmin ? 'Administrador' : 'Usuario'}
-                </Typography>
+                <Chip 
+                  label={isAdmin ? 'Administrador' : 'Usuario'} 
+                  size="small" 
+                  color={isAdmin ? 'primary' : 'default'}
+                  sx={{ height: 20, fontSize: '0.7rem' }}
+                />
               </Stack>
             </MenuItem>
-            
+
             <Divider />
-            
-            {isAdmin && (
-              <MenuItem onClick={handleAdminPanel}>
-                <AdminIcon fontSize="small" sx={{ mr: 1 }} />
-                Panel de Administración
-              </MenuItem>
-            )}
-            
+
+            <MenuItem onClick={handleAdminPanel} disabled={!isAdmin}>
+              <DashboardIcon fontSize="small" sx={{ mr: 2, color: 'primary.main' }} />
+              Panel Administrativo
+            </MenuItem>
+
+            <MenuItem onClick={handleClientsPanel}>
+              <GroupIcon fontSize="small" sx={{ mr: 2, color: 'primary.main' }} />
+              Gestión de Clientes
+            </MenuItem>
+
+            <MenuItem onClick={handleExportData}>
+              <DownloadIcon fontSize="small" sx={{ mr: 2, color: 'primary.main' }} />
+              Exportar Datos
+            </MenuItem>
+
+            <Divider />
+
             <MenuItem onClick={handleLogout}>
-              <LogoutIcon fontSize="small" sx={{ mr: 1 }} />
-              Cerrar Sesión
+              <LogoutIcon fontSize="small" sx={{ mr: 2, color: 'error.main' }} />
+              <Typography color="error.main">
+                Cerrar Sesión
+              </Typography>
             </MenuItem>
           </Menu>
         </Toolbar>
       </AppBar>
 
       {/* Main Content */}
-      <Container maxWidth="xl" sx={{ py: 4 }}>
-        {/* Header con estadísticas y búsqueda */}
-        <Paper 
+      <Container maxWidth="xl" sx={{ py: 3 }}>
+        {/* Panel de Control */}
+        <Paper
           elevation={0}
-          sx={{ 
-            p: 3, 
+          sx={{
+            p: 3,
             mb: 3,
-            borderRadius: 2,
-            bgcolor: 'background.paper'
+            borderRadius: 3,
+            bgcolor: 'white',
+            boxShadow: '0 4px 20px rgba(0,0,0,0.08)'
           }}
         >
-          <Stack 
-            direction="row" 
-            justifyContent="space-between" 
-            alignItems="center"
-            sx={{ mb: 3 }}
-          >
-            <Box>
-              <Typography variant="h5" fontWeight={600} gutterBottom>
-                Gestión de Facturas
-              </Typography>
-              <Stack direction="row" spacing={3}>
-                <Box>
-                  <Typography variant="body2" color="text.secondary">
-                    Pendientes
-                  </Typography>
-                  <Badge 
-                    badgeContent={pendingCount} 
-                    color="error"
-                    sx={{ 
-                      '& .MuiBadge-badge': {
-                        fontSize: '0.75rem',
-                        height: 20,
-                        minWidth: 20
-                      }
-                    }}
-                  >
-                    <Typography variant="h6" color="error.main">
-                      {pendingCount}
-                    </Typography>
-                  </Badge>
-                </Box>
-                <Box>
-                  <Typography variant="body2" color="text.secondary">
-                    Despachadas
-                  </Typography>
-                  <Badge 
-                    badgeContent={deliveredCount} 
-                    color="success"
-                    sx={{ 
-                      '& .MuiBadge-badge': {
-                        fontSize: '0.75rem',
-                        height: 20,
-                        minWidth: 20
-                      }
-                    }}
-                  >
-                    <Typography variant="h6" color="success.main">
-                      {deliveredCount}
-                    </Typography>
-                  </Badge>
-                </Box>
-              </Stack>
-            </Box>
-            
-            <Stack direction="row" spacing={2}>
-              <Button
-                variant="outlined"
-                startIcon={<RefreshIcon />}
-                onClick={fetchInvoices}
-                disabled={loading}
-              >
-                Actualizar
-              </Button>
-              <Button
-                variant="contained"
-                startIcon={<AddIcon />}
-                onClick={handleAddInvoice}
-                sx={{ display: { xs: 'none', md: 'flex' } }}
-              >
-                Nueva Factura
-              </Button>
-            </Stack>
-          </Stack>
-
           {/* Barra de búsqueda y filtros */}
-          <Stack 
-            direction="row" 
-            spacing={2}
-            sx={{ mb: 2 }}
-          >
-            <TextField
-              fullWidth
-              variant="outlined"
-              placeholder="Buscar por número, cliente o teléfono..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              size="medium"
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <SearchIcon color="action" />
-                  </InputAdornment>
-                ),
-                sx: { borderRadius: 2 }
-              }}
-            />
-          </Stack>
+          <Grid container spacing={3} alignItems="center" sx={{ mb: 3 }}>
+            <Grid item xs={12} md={8}>
+              <TextField
+                fullWidth
+                variant="outlined"
+                placeholder="Buscar por número de factura, cliente o teléfono..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                size="medium"
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <SearchIcon color="action" />
+                    </InputAdornment>
+                  ),
+                  sx: { 
+                    borderRadius: 2,
+                    bgcolor: 'grey.50'
+                  }
+                }}
+              />
+            </Grid>
+            
+            <Grid item xs={12} md={4}>
+              <Stack direction="row" spacing={2} justifyContent="flex-end">
+                <Tooltip title="Ordenar por">
+                  <Button
+                    variant="outlined"
+                    startIcon={<SortIcon />}
+                    onClick={() => {
+                      const sorts = ['date', 'client', 'status'] as const;
+                      const currentIndex = sorts.indexOf(sortBy);
+                      setSortBy(sorts[(currentIndex + 1) % sorts.length]);
+                    }}
+                    sx={{ textTransform: 'none' }}
+                  >
+                    {sortBy === 'date' && 'Fecha'}
+                    {sortBy === 'client' && 'Cliente'}
+                    {sortBy === 'status' && 'Estado'}
+                  </Button>
+                </Tooltip>
+                
+                <Tooltip title="Actualizar lista">
+                  <IconButton 
+                    onClick={fetchInvoices} 
+                    disabled={loading}
+                    sx={{ 
+                      bgcolor: 'primary.main', 
+                      color: 'white',
+                      '&:hover': { bgcolor: 'primary.dark' }
+                    }}
+                  >
+                    <RefreshIcon />
+                  </IconButton>
+                </Tooltip>
+              </Stack>
+            </Grid>
+          </Grid>
 
-          {/* Tabs */}
-          <Tabs
-            value={tabIndex}
-            onChange={(_, value) => setTabIndex(value)}
+          {/* Tabs Mejoradas */}
+          <Paper 
+            elevation={0} 
             sx={{ 
-              borderBottom: 1, 
-              borderColor: 'divider',
-              '& .MuiTab-root': {
-                fontSize: '1rem',
-                fontWeight: 600,
-                minHeight: 48,
-                textTransform: 'none'
-              }
+              borderRadius: 2, 
+              bgcolor: 'grey.50',
+              mb: 3
             }}
           >
-            <Tab 
-              label={
-                <Stack direction="row" alignItems="center" spacing={1}>
-                  <span>Pendientes</span>
-                  {pendingCount > 0 && (
-                    <Chip 
-                      label={pendingCount} 
-                      size="small" 
-                      color="error"
-                      sx={{ height: 20, fontSize: '0.75rem' }}
-                    />
-                  )}
-                </Stack>
-              } 
-            />
-            <Tab 
-              label={
-                <Stack direction="row" alignItems="center" spacing={1}>
-                  <span>Despachadas</span>
-                  {deliveredCount > 0 && (
-                    <Chip 
-                      label={deliveredCount} 
-                      size="small" 
-                      color="success"
-                      sx={{ height: 20, fontSize: '0.75rem' }}
-                    />
-                  )}
-                </Stack>
-              } 
-            />
-          </Tabs>
+            <Tabs
+              value={tabIndex}
+              onChange={(_, value) => setTabIndex(value)}
+              variant="fullWidth"
+              sx={{
+                '& .MuiTab-root': {
+                  py: 2,
+                  textTransform: 'none',
+                  fontSize: '1rem',
+                  fontWeight: 500,
+                  borderRadius: 2,
+                  transition: 'all 0.2s',
+                  '&.Mui-selected': {
+                    bgcolor: 'white',
+                    boxShadow: 1,
+                    color: 'primary.main',
+                  }
+                }
+              }}
+            >
+              <Tab 
+                label={
+                  <Stack direction="row" alignItems="center" spacing={1}>
+                    <PendingIcon fontSize="small" />
+                    <span>Pendientes</span>
+                    {stats.pending > 0 && (
+                      <Chip
+                        label={stats.pending}
+                        size="small"
+                        color="error"
+                        sx={{ height: 20, fontSize: '0.75rem' }}
+                      />
+                    )}
+                  </Stack>
+                }
+              />
+              <Tab 
+                label={
+                  <Stack direction="row" alignItems="center" spacing={1}>
+                    <CheckCircleIcon fontSize="small" />
+                    <span>Despachadas</span>
+                    {stats.delivered > 0 && (
+                      <Chip
+                        label={stats.delivered}
+                        size="small"
+                        color="success"
+                        sx={{ height: 20, fontSize: '0.75rem' }}
+                      />
+                    )}
+                  </Stack>
+                }
+              />
+            </Tabs>
+          </Paper>
+
+          {/* Indicador de carga */}
+          {loading && (
+            <LinearProgress sx={{ mb: 3, borderRadius: 2 }} />
+          )}
+
+          {/* Contador de resultados */}
+          <Alert 
+            severity="info" 
+            sx={{ 
+              mb: 3, 
+              borderRadius: 2,
+              bgcolor: 'primary.50',
+              border: '1px solid',
+              borderColor: 'primary.100'
+            }}
+          >
+            <Typography variant="body2">
+              Mostrando <strong>{filteredInvoices.length}</strong> de <strong>{stats.total}</strong> facturas
+              {search && ` para la búsqueda: "${search}"`}
+            </Typography>
+          </Alert>
         </Paper>
 
-        {/* Lista/Grid de facturas */}
+        {/* Lista de Facturas - Vista Mejorada */}
         {loading ? (
-          <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
+          <Box sx={{ 
+            display: 'flex', 
+            justifyContent: 'center', 
+            py: 8,
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: 3
+          }}>
             <CircularProgress size={60} />
+            <Typography color="text.secondary">
+              Cargando facturas...
+            </Typography>
           </Box>
-        ) : searchFilteredInvoices.length === 0 ? (
-          <Paper 
-            sx={{ 
-              p: 8, 
+        ) : filteredInvoices.length === 0 ? (
+          <Paper
+            sx={{
+              p: 8,
               textAlign: 'center',
-              borderRadius: 2
+              borderRadius: 3,
+              bgcolor: 'white',
+              boxShadow: '0 4px 20px rgba(0,0,0,0.05)'
             }}
           >
+            <Box sx={{ 
+              width: 80, 
+              height: 80, 
+              bgcolor: 'grey.100', 
+              borderRadius: '50%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              mb: 3,
+              mx: 'auto'
+            }}>
+              {tabIndex === 0 ? (
+                <CheckCircleIcon sx={{ fontSize: 40, color: 'success.main' }} />
+              ) : (
+                <PendingIcon sx={{ fontSize: 40, color: 'warning.main' }} />
+              )}
+            </Box>
             <Typography variant="h6" color="text.secondary" gutterBottom>
               {search ? 'No se encontraron facturas' :
-               tabIndex === 0 ? 'No hay facturas pendientes' :
-               'No hay facturas despachadas'}
+                tabIndex === 0 ? '¡Todo al día!' :
+                  'No hay facturas despachadas'}
             </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-              {search ? 'Intenta con otros términos de búsqueda' : 
-               tabIndex === 0 ? 'Todas las facturas han sido despachadas' :
-               'Registra tu primera entrega'}
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 4, maxWidth: 400, mx: 'auto' }}>
+              {search ? 'Prueba con otros términos de búsqueda o revisa la ortografía' :
+                tabIndex === 0 ? 'Todas las facturas han sido procesadas correctamente' :
+                  'Las facturas despachadas aparecerán aquí'}
             </Typography>
-            {!search && tabIndex === 0 && (
+            {tabIndex === 0 && !search && (
               <Button
                 variant="contained"
+                size="large"
                 startIcon={<AddIcon />}
                 onClick={handleAddInvoice}
-                size="large"
+                sx={{ borderRadius: 2 }}
               >
-                Crear Primera Factura
+                Registrar Nueva Factura
               </Button>
             )}
           </Paper>
         ) : (
-          <Grid container spacing={3}>
-            {searchFilteredInvoices.map((invoice) => (
-              <Grid item xs={12} key={invoice.id}>
-                <Card 
-                  elevation={1}
-                  sx={{ 
-                    borderRadius: 2,
-                    transition: 'all 0.2s ease-in-out',
-                    '&:hover': {
-                      elevation: 4,
-                      transform: 'translateY(-2px)',
-                      boxShadow: 4
+          <List sx={{ 
+            bgcolor: 'transparent',
+            p: 0
+          }}>
+            {filteredInvoices.map((invoice, index) => (
+              <Fade in={true} timeout={300} key={invoice.id}>
+                <ListItem
+                  disablePadding
+                  sx={{
+                    mb: 2,
+                    animation: `fadeIn 0.5s ease ${index * 0.1}s both`,
+                    '@keyframes fadeIn': {
+                      '0%': { opacity: 0, transform: 'translateY(20px)' },
+                      '100%': { opacity: 1, transform: 'translateY(0)' },
                     }
                   }}
                 >
-                  <CardContent sx={{ p: 3 }}>
-                    <Grid container spacing={3} alignItems="center">
-                      {/* Columna 1: Información principal */}
-                      <Grid item md={4}>
-                        <Stack spacing={1}>
-                          <Box>
-                            <Typography 
-                              variant="subtitle1" 
-                              fontWeight={600}
-                              sx={{ 
-                                color: 'primary.main',
-                                cursor: 'pointer',
-                                '&:hover': { color: 'primary.dark' }
-                              }}
-                              onClick={() => handleViewDetails(invoice)}
-                            >
-                              {invoice.invoiceNumber}
-                            </Typography>
-                            <Typography variant="body1" fontWeight={500}>
-                              {invoice.clientName}
-                            </Typography>
-                            <Stack direction="row" spacing={1} alignItems="center">
-                              <PhoneIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
-                              <Typography variant="body2" color="text.secondary">
-                                {invoice.clientPhone}
+                  <Paper
+                    elevation={0}
+                    sx={{
+                      width: '100%',
+                      borderRadius: 3,
+                      bgcolor: 'white',
+                      border: '1px solid',
+                      borderColor: 'divider',
+                      overflow: 'hidden',
+                      transition: 'all 0.3s ease',
+                      '&:hover': {
+                        boxShadow: '0 8px 30px rgba(0,0,0,0.12)',
+                        transform: 'translateY(-2px)',
+                        borderColor: 'primary.light',
+                      }
+                    }}
+                  >
+                    <ListItemButton 
+                      onClick={() => handleViewDetails(invoice)}
+                      sx={{ 
+                        p: 3,
+                        '&:hover': {
+                          bgcolor: 'grey.50'
+                        }
+                      }}
+                    >
+                      <Grid container spacing={3} alignItems="center">
+                        {/* Columna 1: Información Principal */}
+                        <Grid item xs={12} md={4}>
+                          <Stack spacing={2}>
+                            <Stack direction="row" spacing={2} alignItems="center">
+                              <Box sx={{ 
+                                width: 12, 
+                                height: 12, 
+                                borderRadius: '50%',
+                                bgcolor: getPriorityColor(invoice)
+                              }} />
+                              <Typography variant="h6" fontWeight={600} color="primary">
+                                {invoice.invoiceNumber}
                               </Typography>
                             </Stack>
-                          </Box>
-                          
-                          {invoice.clientAddress && (
-                            <Stack direction="row" spacing={1} alignItems="flex-start">
-                              <LocationIcon sx={{ fontSize: 16, color: 'text.secondary', mt: 0.5 }} />
-                              <Typography variant="body2" color="text.secondary">
-                                {invoice.clientAddress}
+                            
+                            <Stack spacing={1}>
+                              <Typography variant="subtitle1" fontWeight={500}>
+                                {invoice.clientName}
                               </Typography>
+                              
+                              <Stack direction="row" spacing={2}>
+                                <Stack direction="row" spacing={1} alignItems="center">
+                                  <PhoneIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
+                                  <Typography variant="body2" color="text.secondary">
+                                    {invoice.clientPhone}
+                                  </Typography>
+                                </Stack>
+                                
+                                <Stack direction="row" spacing={1} alignItems="center">
+                                  <CalendarIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
+                                  <Typography variant="body2" color="text.secondary">
+                                    {formatDate(invoice.createdAt)}
+                                  </Typography>
+                                </Stack>
+                              </Stack>
                             </Stack>
-                          )}
-                        </Stack>
-                      </Grid>
-
-                      {/* Columna 2: Fecha y entregas */}
-                      <Grid item md={3}>
-                        <Stack spacing={2}>
-                          <Stack direction="row" spacing={1} alignItems="center">
-                            <CalendarIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
-                            <Typography variant="body2" color="text.secondary">
-                              {format(invoice.createdAt, 'dd/MM/yyyy HH:mm', { locale: es })}
-                            </Typography>
                           </Stack>
-                          
-                          {invoice.deliveries.length > 0 && (
-                            <Stack direction="row" spacing={1} alignItems="center">
-                              <ShippingIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
-                              <Typography variant="body2" color="text.secondary">
-                                {invoice.deliveries.length} entrega(s)
-                              </Typography>
-                            </Stack>
-                          )}
-                        </Stack>
-                      </Grid>
+                        </Grid>
 
-                      {/* Columna 3: Fotos */}
-                      <Grid item md={2}>
-                        {invoice.photos.length > 0 && (
-                          <Box>
-                            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                              {invoice.photos.length} foto(s)
-                            </Typography>
-                            <Stack direction="row" spacing={1}>
-                              {invoice.photos.slice(0, 2).map((photo, index) => (
-                                <Box
-                                  key={index}
-                                  component="img"
-                                  src={photo}
-                                  alt={`Factura ${index + 1}`}
-                                  sx={{
-                                    width: 40,
-                                    height: 40,
-                                    objectFit: 'cover',
-                                    borderRadius: 1,
-                                    border: 1,
-                                    borderColor: 'divider'
-                                  }}
-                                  onError={(e) => {
-                                    (e.target as HTMLImageElement).src = 'https://via.placeholder.com/40x40?text=Imagen';
-                                  }}
-                                />
-                              ))}
-                              {invoice.photos.length > 2 && (
-                                <Box
-                                  sx={{
-                                    width: 40,
-                                    height: 40,
-                                    bgcolor: 'grey.100',
-                                    borderRadius: 1,
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    border: 1,
-                                    borderColor: 'divider'
-                                  }}
-                                >
-                                  <Typography variant="caption" color="text.secondary">
-                                    +{invoice.photos.length - 2}
+                        {/* Columna 2: Estado y Detalles */}
+                        <Grid item xs={12} md={3}>
+                          <Stack spacing={2}>
+                            <Chip
+                              icon={getStatusIcon(invoice.status)}
+                              label={invoice.status}
+                              color={getStatusColor(invoice.status)}
+                              sx={{ 
+                                fontWeight: 600,
+                                width: 'fit-content'
+                              }}
+                            />
+                            
+                            {invoice.deliveries?.length > 0 && (
+                              <Stack direction="row" spacing={1} alignItems="center">
+                                <ShippingIcon sx={{ fontSize: 16, color: 'primary.main' }} />
+                                <Typography variant="body2" color="primary.main">
+                                  {invoice.deliveries.length} entrega(s)
+                                </Typography>
+                              </Stack>
+                            )}
+                          </Stack>
+                        </Grid>
+
+                        {/* Columna 3: Fotos */}
+                        <Grid item xs={12} md={2}>
+                          {invoice.photos.length > 0 ? (
+                            <Tooltip title={`${invoice.photos.length} fotos adjuntas`}>
+                              <Stack direction="row" spacing={1} alignItems="center">
+                                <PhotoCameraIcon sx={{ color: 'primary.main' }} />
+                                <Box sx={{ 
+                                  width: 24, 
+                                  height: 24, 
+                                  bgcolor: 'primary.50',
+                                  borderRadius: 1,
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center'
+                                }}>
+                                  <Typography variant="caption" color="primary.main" fontWeight={600}>
+                                    {invoice.photos.length}
                                   </Typography>
                                 </Box>
-                              )}
-                            </Stack>
-                          </Box>
-                        )}
-                      </Grid>
+                              </Stack>
+                            </Tooltip>
+                          ) : (
+                            <Typography variant="caption" color="text.secondary">
+                              Sin fotos
+                            </Typography>
+                          )}
+                        </Grid>
 
-                      {/* Columna 4: Estado y acciones */}
-                      <Grid item md={3}>
-                        <Stack spacing={2} alignItems="flex-end">
-                          <Chip
-                            label={getStatusText(invoice.status)}
-                            color={getStatusColor(invoice.status)}
-                            size="medium"
-                            sx={{ 
-                              fontWeight: 600,
-                              minWidth: 120
-                            }}
-                          />
-                          
-                          <Stack direction="row" spacing={1}>
-                            <Button
-                              variant="contained"
-                              size="small"
-                              startIcon={<ShippingIcon />}
-                              onClick={() => handleQuickDelivery(invoice)}
-                              disabled={invoice.status === 'Despachada'}
-                              sx={{ 
-                                textTransform: 'none',
-                                fontWeight: 500
-                              }}
-                            >
-                              {invoice.status === 'Pendiente' ? 'Registrar Entrega' : 'Agregar Entrega'}
-                            </Button>
+                        {/* Columna 4: Acciones */}
+                        <Grid item xs={12} md={3}>
+                          <Stack direction="row" spacing={1} justifyContent="flex-end">
+                            <Tooltip title="Registrar entrega">
+                              <span>
+                                <Button
+                                  variant="contained"
+                                  size="small"
+                                  startIcon={<ShippingIcon />}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleQuickDelivery(invoice);
+                                  }}
+                                  disabled={invoice.status === 'Despachada'}
+                                  sx={{
+                                    textTransform: 'none',
+                                    fontWeight: 500,
+                                    borderRadius: 2,
+                                    minWidth: 140
+                                  }}
+                                >
+                                  {invoice.status === 'Pendiente' ? 'Despachar' : 'Agregar'}
+                                </Button>
+                              </span>
+                            </Tooltip>
                             
-                            <Button
-                              variant="outlined"
-                              size="small"
-                              startIcon={<VisibilityIcon />}
-                              onClick={() => handleViewDetails(invoice)}
-                              sx={{ 
-                                textTransform: 'none',
-                                fontWeight: 500
-                              }}
-                            >
-                              Ver
-                            </Button>
+                            <Tooltip title="Ver detalles">
+                              <IconButton
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleViewDetails(invoice);
+                                }}
+                                sx={{
+                                  border: 1,
+                                  borderColor: 'divider'
+                                }}
+                              >
+                                <VisibilityIcon />
+                              </IconButton>
+                            </Tooltip>
+                            
+                            <Tooltip title="Más opciones">
+                              <IconButton
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedInvoice(invoice);
+                                }}
+                              >
+                                <MoreVertIcon />
+                              </IconButton>
+                            </Tooltip>
                           </Stack>
-                        </Stack>
+                        </Grid>
                       </Grid>
-                    </Grid>
-                  </CardContent>
-                </Card>
-              </Grid>
+                    </ListItemButton>
+                  </Paper>
+                </ListItem>
+              </Fade>
             ))}
-          </Grid>
+          </List>
         )}
       </Container>
 
-      {/* Botón flotante para móvil */}
-      <Fab
-        color="primary"
-        onClick={handleAddInvoice}
-        sx={{
-          position: 'fixed',
-          bottom: 32,
+      {/* Botón de Acción Rápida Flotante */}
+      <Zoom in={true}>
+        <Fab
+          color="primary"
+          onClick={handleAddInvoice}
+          sx={{
+            position: 'fixed',
+            bottom: 32,
+            right: 32,
+            width: 56,
+            height: 56,
+            boxShadow: '0 8px 25px rgba(41, 98, 255, 0.3)',
+            '&:hover': {
+              boxShadow: '0 12px 30px rgba(41, 98, 255, 0.4)',
+              transform: 'scale(1.05)'
+            }
+          }}
+        >
+          <AddIcon />
+        </Fab>
+      </Zoom>
+
+      {/* SpeedDial para acciones rápidas */}
+      {quickActionsOpen && (
+        <Box sx={{ 
+          position: 'fixed', 
+          bottom: 100, 
           right: 32,
-          display: { xs: 'flex', md: 'none' }
-        }}
-      >
-        <AddIcon />
-      </Fab>
+          zIndex: 1000 
+        }}>
+          <Stack spacing={2} alignItems="flex-end">
+            {quickActions.map((action, index) => (
+              <Zoom in={true} timeout={300} style={{ transitionDelay: `${index * 100}ms` }} key={action.name}>
+                <Tooltip title={action.name} placement="left">
+                  <Fab
+                    size="medium"
+                    color="primary"
+                    onClick={action.action}
+                    sx={{
+                      width: 48,
+                      height: 48,
+                      boxShadow: 3
+                    }}
+                  >
+                    {action.icon}
+                  </Fab>
+                </Tooltip>
+              </Zoom>
+            ))}
+          </Stack>
+        </Box>
+      )}
     </Box>
   );
 };

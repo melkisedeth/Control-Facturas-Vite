@@ -1,15 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { 
-  collection, 
-  query, 
-  orderBy, 
-  getDocs, 
-  deleteDoc, 
-  doc, 
-  updateDoc, 
-  serverTimestamp,
-  where 
+import {
+  collection,
+  query,
+  orderBy,
+  getDocs,
+  deleteDoc,
+  doc,
+  updateDoc,
+  serverTimestamp
 } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { Invoice } from '../types/invoice';
@@ -33,7 +32,6 @@ import {
   Grid,
   Card,
   CardContent,
-  CardActions,
   Table,
   TableBody,
   TableCell,
@@ -45,17 +43,18 @@ import {
   Tabs,
   Menu,
   MenuItem,
+  Tooltip,
 } from '@mui/material';
 import {
   ArrowBack as ArrowBackIcon,
   Search as SearchIcon,
-  FilterList as FilterIcon,
   Delete as DeleteIcon,
   Edit as EditIcon,
   MoreVert as MoreVertIcon,
   Visibility as VisibilityIcon,
   LocalShipping as ShippingIcon,
   Refresh as RefreshIcon,
+  CheckCircle as CheckCircleIcon,
 } from '@mui/icons-material';
 
 const AdminPanelScreen: React.FC = () => {
@@ -89,7 +88,7 @@ const AdminPanelScreen: React.FC = () => {
         orderBy('createdAt', 'desc')
       );
       const snapshot = await getDocs(q);
-      
+
       const invoicesList: Invoice[] = [];
       snapshot.forEach((doc) => {
         const data = doc.data();
@@ -98,17 +97,19 @@ const AdminPanelScreen: React.FC = () => {
           invoiceNumber: data.invoiceNumber || '',
           clientName: data.clientName || '',
           clientPhone: data.clientPhone || '',
-          clientAddress: data.clientAddress,
+          clientEmail: data.clientEmail || '',
+          clientId: data.clientId || '',
+          clientAddress: data.clientAddress || '',
           status: data.status || 'Pendiente',
           photos: data.photos || [],
           deliveries: data.deliveries || [],
           createdAt: data.createdAt?.toDate() || new Date(),
           updatedAt: data.updatedAt?.toDate() || new Date(),
-          userEmail: data.userEmail,
-          userId: data.userId,
+          userEmail: data.userEmail || '',
+          userId: data.userId || '',
         });
       });
-      
+
       setInvoices(invoicesList);
     } catch (err) {
       console.error('Error fetching invoices:', err);
@@ -128,14 +129,14 @@ const AdminPanelScreen: React.FC = () => {
   const filteredInvoices = invoices.filter((invoice) => {
     const matchesStatus = tabIndex === 0 ? true :
       tabIndex === 1 ? invoice.status !== 'Despachada' :
-      invoice.status === 'Despachada';
-    
+        invoice.status === 'Despachada';
+
     const matchesSearch = search === '' ? true :
       invoice.invoiceNumber.toLowerCase().includes(search.toLowerCase()) ||
       invoice.clientName.toLowerCase().includes(search.toLowerCase()) ||
       invoice.clientPhone.includes(search) ||
       (invoice.userEmail?.toLowerCase().includes(search.toLowerCase()) ?? false);
-    
+
     return matchesStatus && matchesSearch;
   });
 
@@ -165,12 +166,18 @@ const AdminPanelScreen: React.FC = () => {
         updatedAt: serverTimestamp(),
       });
 
-      setInvoices(invoices.map(inv => 
-        inv.id === selectedInvoice.id 
-          ? { ...inv, clientName, clientPhone, clientAddress, status: status as "Pendiente" | "Parcial" | "Despachada" }
+      setInvoices(invoices.map(inv =>
+        inv.id === selectedInvoice.id
+          ? { 
+            ...inv, 
+            clientName, 
+            clientPhone, 
+            clientAddress, 
+            status: status as "Pendiente" | "Parcial" | "Despachada" 
+          }
           : inv
       ));
-      
+
       setEditDialogOpen(false);
       setSelectedInvoice(null);
     } catch (err) {
@@ -208,7 +215,7 @@ const AdminPanelScreen: React.FC = () => {
               {invoices.length} facturas registradas
             </Typography>
           </div>
-          
+
           <div className="mt-4 md:mt-0 flex space-x-2">
             <Button
               variant="outlined"
@@ -278,6 +285,8 @@ const AdminPanelScreen: React.FC = () => {
                     <TableCell>Fotos</TableCell>
                     <TableCell>Entregas</TableCell>
                     <TableCell>Usuario</TableCell>
+                    <TableCell>Email Cliente</TableCell>
+                    <TableCell>ID Cliente</TableCell>
                     <TableCell align="right">Acciones</TableCell>
                   </TableRow>
                 </TableHead>
@@ -312,6 +321,20 @@ const AdminPanelScreen: React.FC = () => {
                             {invoice.userEmail || 'Sistema'}
                           </Typography>
                         </TableCell>
+                        <TableCell>
+                          {invoice.clientEmail || '-'}
+                        </TableCell>
+                        <TableCell>
+                          {invoice.clientId ? (
+                            <Tooltip title="Cliente registrado">
+                              <CheckCircleIcon fontSize="small" color="success" />
+                            </Tooltip>
+                          ) : (
+                            <Typography variant="caption" color="textSecondary">
+                              Sin ID
+                            </Typography>
+                          )}
+                        </TableCell>
                         <TableCell align="right">
                           <IconButton
                             size="small"
@@ -319,7 +342,7 @@ const AdminPanelScreen: React.FC = () => {
                           >
                             <MoreVertIcon />
                           </IconButton>
-                          
+
                           <Menu
                             anchorEl={anchorEl}
                             open={selectedMenuIndex === index}

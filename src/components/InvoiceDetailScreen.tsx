@@ -89,12 +89,12 @@ const InvoiceDetailScreenDesktop: React.FC = () => {
 
   const fetchInvoice = async () => {
     if (!id) return;
-    
+
     try {
       setLoading(true);
       const docRef = doc(db, 'invoices', id);
       const docSnap = await getDoc(docRef);
-      
+
       if (docSnap.exists()) {
         const data = docSnap.data();
         const invoiceData: Invoice = {
@@ -143,7 +143,7 @@ const InvoiceDetailScreenDesktop: React.FC = () => {
     try {
       setUpdating(true);
       const newStatus = invoice.status === 'Despachada' ? 'Pendiente' : 'Despachada';
-      
+
       await updateDoc(doc(db, 'invoices', id), {
         status: newStatus,
         updatedAt: serverTimestamp(),
@@ -184,7 +184,7 @@ const InvoiceDetailScreenDesktop: React.FC = () => {
           updatedAt: new Date(),
         });
       }
-      
+
       setIsEditing(false);
     } catch (err) {
       console.error('Error updating invoice:', err);
@@ -262,7 +262,7 @@ const InvoiceDetailScreenDesktop: React.FC = () => {
     );
   }
 
-  const imageUrls = selectedDelivery !== null && invoice.deliveries[selectedDelivery]?.photos 
+  const imageUrls = selectedDelivery !== null && invoice.deliveries[selectedDelivery]?.photos
     ? invoice.deliveries[selectedDelivery].photos
     : invoice.photos;
 
@@ -283,7 +283,7 @@ const InvoiceDetailScreenDesktop: React.FC = () => {
             Detalle de Factura
           </Typography>
         </Stack>
-        
+
         <Stack direction="row" spacing={1}>
           <Button
             variant="outlined"
@@ -303,9 +303,9 @@ const InvoiceDetailScreenDesktop: React.FC = () => {
       </Stack>
 
       {/* Tarjeta principal */}
-      <Paper 
+      <Paper
         elevation={0}
-        sx={{ 
+        sx={{
           borderRadius: 2,
           overflow: 'hidden',
           border: 1,
@@ -313,17 +313,17 @@ const InvoiceDetailScreenDesktop: React.FC = () => {
         }}
       >
         {/* Encabezado con estado y número */}
-        <Box sx={{ 
-          p: 3, 
-          bgcolor: 'primary.light', 
+        <Box sx={{
+          p: 3,
+          bgcolor: 'primary.light',
           borderBottom: 1,
           borderColor: 'divider'
         }}>
           <Grid container alignItems="center" spacing={2}>
             <Grid item xs={12} md={6}>
               <Stack direction="row" alignItems="center" spacing={2}>
-                <Avatar 
-                  sx={{ 
+                <Avatar
+                  sx={{
                     bgcolor: 'primary.main',
                     width: 56,
                     height: 56
@@ -341,14 +341,14 @@ const InvoiceDetailScreenDesktop: React.FC = () => {
                 </Box>
               </Stack>
             </Grid>
-            
+
             <Grid item xs={12} md={6}>
               <Stack direction="row" spacing={2} justifyContent="flex-end">
                 <Chip
                   label={invoice.status}
                   color={getStatusColor(invoice.status)}
                   size="medium"
-                  sx={{ 
+                  sx={{
                     fontWeight: 700,
                     fontSize: '1rem',
                     minWidth: 140,
@@ -361,7 +361,7 @@ const InvoiceDetailScreenDesktop: React.FC = () => {
                   startIcon={updating ? <CircularProgress size={20} /> : <CheckIcon />}
                   onClick={handleStatusChange}
                   disabled={updating}
-                  sx={{ 
+                  sx={{
                     textTransform: 'none',
                     fontWeight: 600,
                     minWidth: 200
@@ -376,8 +376,8 @@ const InvoiceDetailScreenDesktop: React.FC = () => {
 
         {/* Tabs para navegación */}
         <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-          <Tabs 
-            value={activeTab} 
+          <Tabs
+            value={activeTab}
             onChange={(_, newValue) => setActiveTab(newValue)}
             sx={{
               '& .MuiTab-root': {
@@ -387,15 +387,15 @@ const InvoiceDetailScreenDesktop: React.FC = () => {
               }
             }}
           >
-            <Tab 
+            <Tab
               label={
                 <Stack direction="row" alignItems="center" spacing={1}>
                   <PersonIcon fontSize="small" />
                   <span>Información</span>
                 </Stack>
-              } 
+              }
             />
-            <Tab 
+            <Tab
               label={
                 <Badge badgeContent={invoice.photos.length} color="primary">
                   <Stack direction="row" alignItems="center" spacing={1}>
@@ -403,9 +403,9 @@ const InvoiceDetailScreenDesktop: React.FC = () => {
                     <span>Imágenes</span>
                   </Stack>
                 </Badge>
-              } 
+              }
             />
-            <Tab 
+            <Tab
               label={
                 <Badge badgeContent={invoice.deliveries?.length || 0} color="secondary">
                   <Stack direction="row" alignItems="center" spacing={1}>
@@ -413,7 +413,7 @@ const InvoiceDetailScreenDesktop: React.FC = () => {
                     <span>Entregas</span>
                   </Stack>
                 </Badge>
-              } 
+              }
             />
           </Tabs>
         </Box>
@@ -424,9 +424,9 @@ const InvoiceDetailScreenDesktop: React.FC = () => {
             <Grid container spacing={4}>
               {/* Columna izquierda - Información del cliente */}
               <Grid item xs={12} md={6}>
-                <Card 
+                <Card
                   elevation={0}
-                  sx={{ 
+                  sx={{
                     border: 1,
                     borderColor: 'divider',
                     borderRadius: 2
@@ -437,7 +437,7 @@ const InvoiceDetailScreenDesktop: React.FC = () => {
                       <Typography variant="h6" fontWeight={600}>
                         Información del Cliente
                       </Typography>
-                      <IconButton 
+                      <IconButton
                         onClick={() => setIsEditing(!isEditing)}
                         color="primary"
                         size="small"
@@ -518,8 +518,8 @@ const InvoiceDetailScreenDesktop: React.FC = () => {
                               {invoice.clientPhone}
                             </Typography>
                             <Tooltip title="Enviar WhatsApp">
-                              <IconButton 
-                                onClick={handleWhatsApp} 
+                              <IconButton
+                                onClick={handleWhatsApp}
                                 color="success"
                                 size="small"
                                 sx={{ bgcolor: 'success.light' }}
@@ -528,8 +528,8 @@ const InvoiceDetailScreenDesktop: React.FC = () => {
                               </IconButton>
                             </Tooltip>
                             <Tooltip title="Llamar">
-                              <IconButton 
-                                onClick={handleCall} 
+                              <IconButton
+                                onClick={handleCall}
                                 color="primary"
                                 size="small"
                                 sx={{ bgcolor: 'primary.light' }}
@@ -559,11 +559,14 @@ const InvoiceDetailScreenDesktop: React.FC = () => {
                 </Card>
               </Grid>
 
+              {/* Información del Cliente */}
+              
+
               {/* Columna derecha - Información de la factura */}
               <Grid item xs={12} md={6}>
-                <Card 
+                <Card
                   elevation={0}
-                  sx={{ 
+                  sx={{
                     border: 1,
                     borderColor: 'divider',
                     borderRadius: 2
@@ -573,7 +576,7 @@ const InvoiceDetailScreenDesktop: React.FC = () => {
                     <Typography variant="h6" fontWeight={600} sx={{ mb: 3 }}>
                       Información del Documento
                     </Typography>
-                    
+
                     <TableContainer>
                       <Table size="small">
                         <TableBody>
@@ -630,10 +633,10 @@ const InvoiceDetailScreenDesktop: React.FC = () => {
                     </TableContainer>
 
                     {/* Estadísticas rápidas */}
-                    <Box sx={{ 
-                      mt: 4, 
-                      p: 2, 
-                      bgcolor: 'grey.50', 
+                    <Box sx={{
+                      mt: 4,
+                      p: 2,
+                      bgcolor: 'grey.50',
                       borderRadius: 1,
                       border: 1,
                       borderColor: 'divider'
@@ -678,8 +681,8 @@ const InvoiceDetailScreenDesktop: React.FC = () => {
               <Grid container spacing={3}>
                 {invoice.photos.map((photo, index) => (
                   <Grid item xs={12} sm={6} md={4} lg={3} key={index}>
-                    <Card 
-                      sx={{ 
+                    <Card
+                      sx={{
                         height: '100%',
                         cursor: 'pointer',
                         transition: 'all 0.2s',
@@ -752,9 +755,9 @@ const InvoiceDetailScreenDesktop: React.FC = () => {
               <Grid container spacing={3}>
                 {invoice.deliveries.map((delivery: any, index: number) => (
                   <Grid item xs={12} md={6} key={index}>
-                    <Card 
+                    <Card
                       elevation={1}
-                      sx={{ 
+                      sx={{
                         height: '100%',
                         borderLeft: 4,
                         borderColor: 'primary.main',
@@ -779,10 +782,10 @@ const InvoiceDetailScreenDesktop: React.FC = () => {
                         </Stack>
 
                         {delivery.notes && (
-                          <Box sx={{ 
-                            mb: 3, 
-                            p: 2, 
-                            bgcolor: 'grey.50', 
+                          <Box sx={{
+                            mb: 3,
+                            p: 2,
+                            bgcolor: 'grey.50',
                             borderRadius: 1,
                             borderLeft: 3,
                             borderColor: 'primary.light'
@@ -877,11 +880,11 @@ const InvoiceDetailScreenDesktop: React.FC = () => {
         </DialogTitle>
         <DialogContent>
           {imageUrls && imageUrls[selectedImageIndex] && (
-            <Box sx={{ 
-              display: 'flex', 
+            <Box sx={{
+              display: 'flex',
               justifyContent: 'center',
               alignItems: 'center',
-              minHeight: 400 
+              minHeight: 400
             }}>
               <Box
                 component="img"
@@ -931,7 +934,7 @@ const InvoiceDetailScreenDesktop: React.FC = () => {
           />
         </DialogContent>
         <DialogActions sx={{ p: 3, pt: 0 }}>
-          <Button 
+          <Button
             onClick={() => setEditDialogOpen(false)}
             variant="outlined"
             sx={{ textTransform: 'none' }}
