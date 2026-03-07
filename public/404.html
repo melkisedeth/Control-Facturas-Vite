@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Control Facturas</title>
+    <script>
+      // Guarda la ruta completa en sessionStorage y redirige al index
+      var path = window.location.pathname;
+      var base = '/Control-Facturas-Vite';
+      var route = path.replace(base, '') || '/';
+      sessionStorage.setItem('redirect', route + window.location.search);
+      window.location.replace(base + '/');
+    </script>
+  </head>
+</html>
