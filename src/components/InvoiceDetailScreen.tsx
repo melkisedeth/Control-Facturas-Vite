@@ -333,6 +333,9 @@ const InvoiceDetailScreenDesktop: React.FC = () => {
   const [clientPhone, setClientPhone] = useState('');
   const [clientAddress, setClientAddress] = useState('');
 
+  // ─── Admin check ───────────────────────────────────────────────────────────
+  const isAdmin = localStorage.getItem('isAdmin') === 'true';
+
   // Lightbox state
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxPhotos, setLightboxPhotos] = useState<string[]>([]);
@@ -481,7 +484,9 @@ const InvoiceDetailScreenDesktop: React.FC = () => {
 
   const totalPhotos = invoice.photos.length + (invoice.deliveries?.reduce((acc, d) => acc + (d.photos?.length || 0), 0) || 0);
   const hasDeliveries = invoice.deliveries && invoice.deliveries.length > 0;
-  const canMarkAsDispatched = invoice.status === 'Despachada' || hasDeliveries;
+
+  // ─── Admins can always toggle status; non-admins need at least one delivery ──
+  const canMarkAsDispatched = invoice.status === 'Despachada' || isAdmin || hasDeliveries;
 
   return (
     <Container maxWidth="xl" sx={{ py: 4 }}>
@@ -513,7 +518,13 @@ const InvoiceDetailScreenDesktop: React.FC = () => {
             color={getStatusColor(invoice.status) as any}
             sx={{ fontWeight: 700, fontSize: '0.85rem', height: 32 }}
           />
-          <Tooltip title={!canMarkAsDispatched ? 'Debes registrar al menos una entrega antes de marcar como despachada' : ''}>
+          <Tooltip
+            title={
+              !canMarkAsDispatched
+                ? 'Debes registrar al menos una entrega antes de marcar como despachada'
+                : ''
+            }
+          >
             <span>
               <Button
                 variant={invoice.status === 'Despachada' ? 'outlined' : 'contained'}
