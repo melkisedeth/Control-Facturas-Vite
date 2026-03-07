@@ -3,7 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import { onAuthStateChanged, getAuth } from 'firebase/auth';
-import { auth } from './firebase/config'; // Importar desde tu config
+import { auth } from './firebase/config';
 import ErrorBoundary from './components/ErrorBoundary';
 import InvoiceListScreen from './components/InvoiceListScreen';
 import InvoiceCaptureScreen from './components/InvoiceCaptureScreen';
@@ -13,6 +13,8 @@ import AdminPanelScreen from './components/AdminPanelScreen';
 import LoginScreen from './components/LoginScreen';
 import LoadingScreen from './components/LoadingScreen';
 import ClientsScreen from './components/ClientsScreen';
+import InvoiceTrackingScreen from './components/Invoicetrackingscreen';
+// ↓ NEW: public tracking page (no auth required)
 
 const theme = createTheme({
   palette: {
@@ -34,7 +36,6 @@ function App() {
       setUser(user);
       setLoading(false);
     });
-
     return () => unsubscribe();
   }, []);
 
@@ -49,6 +50,10 @@ function App() {
         <Router basename="/Control-Facturas-Vite">
           <div className="min-h-screen bg-gray-50">
             <Routes>
+              {/* ── Public route — no auth required ── */}
+              <Route path="/tracking/:invoiceId" element={<InvoiceTrackingScreen />} />
+
+              {/* ── Auth routes ── */}
               <Route path="/login" element={user ? <Navigate to="/" /> : <LoginScreen />} />
               <Route path="/" element={user ? <InvoiceListScreen /> : <Navigate to="/login" />} />
               <Route path="/capture" element={user ? <InvoiceCaptureScreen /> : <Navigate to="/login" />} />
@@ -59,7 +64,6 @@ function App() {
             </Routes>
           </div>
         </Router>
-
       </ThemeProvider>
     </ErrorBoundary>
   );

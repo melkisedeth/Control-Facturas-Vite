@@ -26,18 +26,15 @@ import {
   Card,
   CardContent,
   Avatar,
-  Tabs,
-  Tab,
   Badge,
-  InputAdornment,
   Tooltip,
   Table,
   TableBody,
   TableCell,
   TableContainer,
-  TableHead,
   TableRow,
-  alpha,
+  InputAdornment,
+  Snackbar,
 } from '@mui/material';
 import {
   ArrowBack as ArrowBackIcon,
@@ -47,23 +44,281 @@ import {
   LocalShipping as ShippingIcon,
   Edit as EditIcon,
   CheckCircle as CheckIcon,
-  Image as ImageIcon,
   WhatsApp as WhatsAppIcon,
   Email as EmailIcon,
   Person as PersonIcon,
   Description as DescriptionIcon,
-  PhotoLibrary as PhotoLibraryIcon,
   History as HistoryIcon,
   Save as SaveIcon,
   Cancel as CancelIcon,
   Fullscreen as FullscreenIcon,
   NoteAdd as NoteAddIcon,
   ArrowForward as ArrowForwardIcon,
-  Download as DownloadIcon,
   Print as PrintIcon,
+  ChevronLeft as ChevronLeftIcon,
+  ChevronRight as ChevronRightIcon,
+  Close as CloseIcon,
+  Image as ImageIcon,
   Share as ShareIcon,
+  ContentCopy as CopyIcon,
+  Check as CheckIconCopy,
+  OpenInNew as OpenInNewIcon,
 } from '@mui/icons-material';
 
+// ─── Tracking URL helper ───────────────────────────────────────────────────────
+const getTrackingUrl = (invoiceId: string) =>
+  `${window.location.origin}/Control-Facturas-Vite/tracking/${invoiceId}`;
+
+// ─── Share Dialog ──────────────────────────────────────────────────────────────
+const ShareDialog: React.FC<{
+  open: boolean;
+  invoiceId: string;
+  invoiceNumber: string;
+  clientPhone?: string;
+  onClose: () => void;
+}> = ({ open, invoiceId, invoiceNumber, clientPhone, onClose }) => {
+  const [copied, setCopied] = useState(false);
+  const url = getTrackingUrl(invoiceId);
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(url);
+    } catch {
+      const el = document.createElement('textarea');
+      el.value = url;
+      document.body.appendChild(el);
+      el.select();
+      document.execCommand('copy');
+      document.body.removeChild(el);
+    }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2500);
+  };
+
+  const handleWhatsApp = () => {
+    const msg = encodeURIComponent(
+      `Hola — Factura *${invoiceNumber}*, puedes ver el estado de tu pedido aquí:\n${url}`
+    );
+    const phone = clientPhone ? `57${clientPhone.replace(/\D/g, '')}` : '';
+    window.open(`https://wa.me/${phone}?text=${msg}`, '_blank');
+  };
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth PaperProps={{ sx: { borderRadius: 3 } }}>
+      <DialogTitle>
+        <Stack direction="row" alignItems="center" spacing={1.5}>
+          <Box
+            sx={{
+              width: 36, height: 36, borderRadius: 1.5, bgcolor: '#eff6ff',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}
+          >
+            <ShareIcon sx={{ color: '#3b82f6', fontSize: 18 }} />
+          </Box>
+          <Box>
+            <Typography variant="subtitle1" fontWeight={700}>Compartir seguimiento</Typography>
+            <Typography variant="caption" color="text.secondary">Factura {invoiceNumber}</Typography>
+          </Box>
+        </Stack>
+      </DialogTitle>
+      <DialogContent>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2.5 }}>
+          Comparte este enlace con tu cliente para que pueda ver el estado de su pedido en tiempo real, sin necesidad de iniciar sesión.
+        </Typography>
+
+        {/* URL field */}
+        <TextField
+          fullWidth
+          value={url}
+          size="small"
+          InputProps={{
+            readOnly: true,
+            sx: { fontFamily: 'monospace', fontSize: '0.8rem', bgcolor: '#f8fafc' },
+            endAdornment: (
+              <InputAdornment position="end">
+                <Tooltip title={copied ? '¡Copiado!' : 'Copiar'}>
+                  <IconButton size="small" onClick={handleCopy} color={copied ? 'success' : 'default'}>
+                    {copied ? <CheckIconCopy fontSize="small" /> : <CopyIcon fontSize="small" />}
+                  </IconButton>
+                </Tooltip>
+              </InputAdornment>
+            ),
+          }}
+          sx={{ mb: 3 }}
+        />
+
+        <Typography variant="caption" color="text.secondary" fontWeight={600} sx={{ textTransform: 'uppercase', letterSpacing: 0.5, fontSize: '0.68rem', display: 'block', mb: 1.5 }}>
+          Compartir vía
+        </Typography>
+        <Stack direction="row" spacing={1.5} flexWrap="wrap">
+          <Button
+            variant="contained"
+            startIcon={<WhatsAppIcon />}
+            onClick={handleWhatsApp}
+            sx={{ bgcolor: '#16a34a', '&:hover': { bgcolor: '#15803d' }, textTransform: 'none', fontWeight: 600, borderRadius: 2 }}
+          >
+            WhatsApp
+          </Button>
+          <Button
+            variant="outlined"
+            startIcon={copied ? <CheckIconCopy /> : <CopyIcon />}
+            onClick={handleCopy}
+            color={copied ? 'success' : 'inherit'}
+            sx={{ textTransform: 'none', fontWeight: 600, borderRadius: 2 }}
+          >
+            {copied ? 'Copiado' : 'Copiar enlace'}
+          </Button>
+          <Tooltip title="Abrir como cliente">
+            <IconButton size="small" onClick={() => window.open(url, '_blank')} sx={{ border: '1px solid', borderColor: 'divider' }}>
+              <OpenInNewIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        </Stack>
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 3 }}>
+        <Button onClick={onClose} variant="outlined" sx={{ textTransform: 'none' }}>Cerrar</Button>
+      </DialogActions>
+    </Dialog>
+  );
+};
+
+// ─── Lightbox ─────────────────────────────────────────────────────────────────
+const Lightbox: React.FC<{
+  open: boolean;
+  photos: string[];
+  index: number;
+  title: string;
+  onClose: () => void;
+  onNavigate: (index: number) => void;
+}> = ({ open, photos, index, title, onClose, onNavigate }) => {
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (!open) return;
+      if (e.key === 'ArrowLeft') onNavigate((index - 1 + photos.length) % photos.length);
+      if (e.key === 'ArrowRight') onNavigate((index + 1) % photos.length);
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [open, index, photos.length]);
+
+  if (!photos.length) return null;
+
+  return (
+    <Dialog
+      open={open}
+      onClose={onClose}
+      maxWidth="lg"
+      fullWidth
+      PaperProps={{ sx: { bgcolor: 'rgba(8,8,18,0.97)', borderRadius: 3, overflow: 'hidden' } }}
+    >
+      <Box sx={{ px: 3, py: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
+        <Stack direction="row" alignItems="center" spacing={2}>
+          <ImageIcon sx={{ color: 'rgba(255,255,255,0.4)', fontSize: 18 }} />
+          <Typography variant="subtitle2" sx={{ color: 'rgba(255,255,255,0.8)', fontWeight: 600 }}>{title}</Typography>
+          <Chip
+            label={`${index + 1} / ${photos.length}`}
+            size="small"
+            sx={{ bgcolor: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.7)', fontWeight: 600, fontSize: '0.72rem' }}
+          />
+        </Stack>
+        <IconButton onClick={onClose} sx={{ color: 'rgba(255,255,255,0.5)', '&:hover': { color: 'white' } }}>
+          <CloseIcon fontSize="small" />
+        </IconButton>
+      </Box>
+
+      <Box sx={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 420, p: 2 }}>
+        {photos.length > 1 && (
+          <IconButton
+            onClick={() => onNavigate((index - 1 + photos.length) % photos.length)}
+            sx={{ position: 'absolute', left: 12, bgcolor: 'rgba(255,255,255,0.1)', color: 'white', '&:hover': { bgcolor: 'rgba(255,255,255,0.2)' }, backdropFilter: 'blur(6px)' }}
+          >
+            <ChevronLeftIcon />
+          </IconButton>
+        )}
+        <Box
+          component="img"
+          src={photos[index]}
+          alt={`Foto ${index + 1}`}
+          sx={{ maxWidth: '100%', maxHeight: '68vh', objectFit: 'contain', borderRadius: 2, boxShadow: '0 20px 60px rgba(0,0,0,0.6)' }}
+        />
+        {photos.length > 1 && (
+          <IconButton
+            onClick={() => onNavigate((index + 1) % photos.length)}
+            sx={{ position: 'absolute', right: 12, bgcolor: 'rgba(255,255,255,0.1)', color: 'white', '&:hover': { bgcolor: 'rgba(255,255,255,0.2)' }, backdropFilter: 'blur(6px)' }}
+          >
+            <ChevronRightIcon />
+          </IconButton>
+        )}
+      </Box>
+
+      {photos.length > 1 && (
+        <Box sx={{ display: 'flex', gap: 1, p: 2, overflowX: 'auto', bgcolor: 'rgba(0,0,0,0.4)', borderTop: '1px solid rgba(255,255,255,0.05)', justifyContent: photos.length <= 7 ? 'center' : 'flex-start' }}>
+          {photos.map((p, i) => (
+            <Box
+              key={i}
+              component="img"
+              src={p}
+              onClick={() => onNavigate(i)}
+              sx={{
+                width: 60, height: 60, objectFit: 'cover', borderRadius: 1.5, cursor: 'pointer', flexShrink: 0,
+                border: i === index ? '2px solid #60a5fa' : '2px solid transparent',
+                opacity: i === index ? 1 : 0.45,
+                transition: 'all 0.15s',
+                '&:hover': { opacity: 0.85, transform: 'scale(1.06)' },
+              }}
+            />
+          ))}
+        </Box>
+      )}
+    </Dialog>
+  );
+};
+
+// ─── Inline Photo Grid ────────────────────────────────────────────────────────
+const PhotoGrid: React.FC<{
+  photos: string[];
+  onOpen: (index: number) => void;
+}> = ({ photos, onOpen }) => {
+  const MAX = 8;
+  const overflow = photos.length - MAX;
+  const visible = photos.slice(0, MAX);
+
+  return (
+    <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))', gap: 1.5 }}>
+      {visible.map((photo, idx) => (
+        <Box
+          key={idx}
+          sx={{ position: 'relative', cursor: 'pointer', borderRadius: 2, overflow: 'hidden', aspectRatio: '1', '&:hover .overlay': { opacity: 1 } }}
+          onClick={() => onOpen(idx)}
+        >
+          <Box
+            component="img"
+            src={photo}
+            alt={`Foto ${idx + 1}`}
+            sx={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', transition: 'transform 0.2s', '&:hover': { transform: 'scale(1.05)' } }}
+          />
+          <Box
+            className="overlay"
+            sx={{ position: 'absolute', inset: 0, bgcolor: 'rgba(0,0,0,0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0, transition: 'opacity 0.2s' }}
+          >
+            <FullscreenIcon sx={{ color: 'white', fontSize: 22 }} />
+          </Box>
+          <Box sx={{ position: 'absolute', top: 6, left: 6, bgcolor: 'rgba(0,0,0,0.5)', color: 'white', px: 0.75, py: 0.25, borderRadius: 1, fontSize: '0.65rem', fontWeight: 700 }}>
+            #{idx + 1}
+          </Box>
+          {idx === MAX - 1 && overflow > 0 && (
+            <Box sx={{ position: 'absolute', inset: 0, bgcolor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Typography variant="h6" sx={{ color: 'white', fontWeight: 700 }}>+{overflow}</Typography>
+            </Box>
+          )}
+        </Box>
+      ))}
+    </Box>
+  );
+};
+
+// ─── Main Component ───────────────────────────────────────────────────────────
 const InvoiceDetailScreenDesktop: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -73,28 +328,52 @@ const InvoiceDetailScreenDesktop: React.FC = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [editNotes, setEditNotes] = useState('');
   const [selectedDelivery, setSelectedDelivery] = useState<number | null>(null);
-  const [selectedImageIndex, setSelectedImageIndex] = useState(0);
-  const [imageDialogOpen, setImageDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState(0);
   const [clientName, setClientName] = useState('');
   const [clientPhone, setClientPhone] = useState('');
   const [clientAddress, setClientAddress] = useState('');
 
-  useEffect(() => {
-    if (id) {
-      fetchInvoice();
+  // Lightbox state
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [lightboxPhotos, setLightboxPhotos] = useState<string[]>([]);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
+  const [lightboxTitle, setLightboxTitle] = useState('');
+
+  const openLightbox = (photos: string[], index: number, title: string) => {
+    setLightboxPhotos(photos);
+    setLightboxIndex(index);
+    setLightboxTitle(title);
+    setLightboxOpen(true);
+  };
+
+  const [snackCopied, setSnackCopied] = useState(false);
+
+  const handleShare = async () => {
+    if (!id) return;
+    const url = getTrackingUrl(id);
+    try {
+      await navigator.clipboard.writeText(url);
+    } catch {
+      const el = document.createElement('textarea');
+      el.value = url;
+      document.body.appendChild(el);
+      el.select();
+      document.execCommand('copy');
+      document.body.removeChild(el);
     }
+    setSnackCopied(true);
+  };
+
+  useEffect(() => {
+    if (id) fetchInvoice();
   }, [id]);
 
   const fetchInvoice = async () => {
     if (!id) return;
-
     try {
       setLoading(true);
       const docRef = doc(db, 'invoices', id);
       const docSnap = await getDoc(docRef);
-
       if (docSnap.exists()) {
         const data = docSnap.data();
         const invoiceData: Invoice = {
@@ -118,7 +397,7 @@ const InvoiceDetailScreenDesktop: React.FC = () => {
         setClientAddress(invoiceData.clientAddress || '');
       }
     } catch (err) {
-      console.error('Error fetching invoice:', err);
+      console.error(err);
     } finally {
       setLoading(false);
     }
@@ -134,30 +413,22 @@ const InvoiceDetailScreenDesktop: React.FC = () => {
 
   const formatDate = (date?: Date) => {
     if (!date) return 'No disponible';
-    return format(date, 'dd/MM/yyyy HH:mm', { locale: es });
+    return format(date, "dd 'de' MMMM yyyy · HH:mm", { locale: es });
   };
 
   const handleStatusChange = async () => {
     if (!id || !invoice) return;
-
     try {
       setUpdating(true);
       const newStatus = invoice.status === 'Despachada' ? 'Pendiente' : 'Despachada';
-
       await updateDoc(doc(db, 'invoices', id), {
         status: newStatus,
         updatedAt: serverTimestamp(),
         deliveredAt: newStatus === 'Despachada' ? serverTimestamp() : null,
       });
-
-      setInvoice({
-        ...invoice,
-        status: newStatus,
-        updatedAt: new Date(),
-        deliveredAt: newStatus === 'Despachada' ? new Date() : undefined,
-      });
+      setInvoice({ ...invoice, status: newStatus, updatedAt: new Date(), deliveredAt: newStatus === 'Despachada' ? new Date() : undefined });
     } catch (err) {
-      console.error('Error updating status:', err);
+      console.error(err);
     } finally {
       setUpdating(false);
     }
@@ -165,80 +436,36 @@ const InvoiceDetailScreenDesktop: React.FC = () => {
 
   const handleSaveEdit = async () => {
     if (!id) return;
-
     try {
       setUpdating(true);
-      await updateDoc(doc(db, 'invoices', id), {
-        clientName,
-        clientPhone,
-        clientAddress,
-        updatedAt: serverTimestamp(),
-      });
-
-      if (invoice) {
-        setInvoice({
-          ...invoice,
-          clientName,
-          clientPhone,
-          clientAddress,
-          updatedAt: new Date(),
-        });
-      }
-
+      await updateDoc(doc(db, 'invoices', id), { clientName, clientPhone, clientAddress, updatedAt: serverTimestamp() });
+      if (invoice) setInvoice({ ...invoice, clientName, clientPhone, clientAddress, updatedAt: new Date() });
       setIsEditing(false);
     } catch (err) {
-      console.error('Error updating invoice:', err);
+      console.error(err);
     } finally {
       setUpdating(false);
     }
   };
 
   const handleAddDeliveryNote = async (deliveryIndex: number, note: string) => {
-    if (!id || !invoice || !invoice.deliveries) return;
-
+    if (!id || !invoice?.deliveries) return;
     try {
-      const updatedDeliveries = [...invoice.deliveries];
-      updatedDeliveries[deliveryIndex] = {
-        ...updatedDeliveries[deliveryIndex],
-        notes: note,
-      };
-
-      await updateDoc(doc(db, 'invoices', id), {
-        deliveries: updatedDeliveries,
-        updatedAt: serverTimestamp(),
-      });
-
-      setInvoice({
-        ...invoice,
-        deliveries: updatedDeliveries,
-        updatedAt: new Date(),
-      });
-
+      const updated = [...invoice.deliveries];
+      updated[deliveryIndex] = { ...updated[deliveryIndex], notes: note };
+      await updateDoc(doc(db, 'invoices', id), { deliveries: updated, updatedAt: serverTimestamp() });
+      setInvoice({ ...invoice, deliveries: updated, updatedAt: new Date() });
       setEditDialogOpen(false);
       setEditNotes('');
     } catch (err) {
-      console.error('Error updating delivery note:', err);
-    }
-  };
-
-  const handleWhatsApp = () => {
-    if (invoice?.clientPhone) {
-      const phone = invoice.clientPhone.replace(/\D/g, '');
-      const url = `https://wa.me/57${phone}`;
-      window.open(url, '_blank');
-    }
-  };
-
-  const handleCall = () => {
-    if (invoice?.clientPhone) {
-      window.location.href = `tel:${invoice.clientPhone}`;
+      console.error(err);
     }
   };
 
   if (loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
-        <CircularProgress size={60} />
+        <CircularProgress size={52} />
       </Box>
     );
   }
@@ -246,713 +473,439 @@ const InvoiceDetailScreenDesktop: React.FC = () => {
   if (!invoice) {
     return (
       <Container maxWidth="lg" sx={{ py: 4 }}>
-        <Paper sx={{ p: 4 }}>
-          <Alert severity="error" sx={{ mb: 3 }}>
-            Factura no encontrada
-          </Alert>
-          <Button
-            startIcon={<ArrowBackIcon />}
-            onClick={() => navigate(-1)}
-            variant="contained"
-          >
-            Volver al listado
-          </Button>
-        </Paper>
+        <Alert severity="error" sx={{ mb: 2 }}>Factura no encontrada</Alert>
+        <Button startIcon={<ArrowBackIcon />} onClick={() => navigate(-1)} variant="contained">Volver</Button>
       </Container>
     );
   }
 
-  const imageUrls = selectedDelivery !== null && invoice.deliveries[selectedDelivery]?.photos
-    ? invoice.deliveries[selectedDelivery].photos
-    : invoice.photos;
+  const totalPhotos = invoice.photos.length + (invoice.deliveries?.reduce((acc, d) => acc + (d.photos?.length || 0), 0) || 0);
 
   return (
     <Container maxWidth="xl" sx={{ py: 4 }}>
-      {/* Header con breadcrumb y acciones */}
-      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 4 }}>
+      {/* ── Top bar ─────────────────────────────────────────────── */}
+      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 3 }}>
         <Stack direction="row" spacing={2} alignItems="center">
           <Button
             startIcon={<ArrowBackIcon />}
             onClick={() => navigate(-1)}
             variant="outlined"
             size="small"
+            sx={{ textTransform: 'none' }}
           >
             Volver
           </Button>
-          <Typography variant="h5" fontWeight={600} color="text.primary">
-            Detalle de Factura
-          </Typography>
+          <Stack spacing={0}>
+            <Typography variant="h5" fontWeight={700} color="text.primary">
+              Factura {invoice.invoiceNumber}
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              Creada el {formatDate(invoice.createdAt)}
+            </Typography>
+          </Stack>
         </Stack>
 
-        <Stack direction="row" spacing={1}>
+        <Stack direction="row" spacing={1.5} alignItems="center">
+          <Chip
+            label={invoice.status}
+            color={getStatusColor(invoice.status) as any}
+            sx={{ fontWeight: 700, fontSize: '0.85rem', height: 32 }}
+          />
           <Button
-            variant="outlined"
-            startIcon={<PrintIcon />}
-            onClick={() => window.print()}
+            variant={invoice.status === 'Despachada' ? 'outlined' : 'contained'}
+            color={invoice.status === 'Despachada' ? 'inherit' : 'success'}
+            startIcon={updating ? <CircularProgress size={16} /> : <CheckIcon />}
+            onClick={handleStatusChange}
+            disabled={updating}
+            sx={{ textTransform: 'none', fontWeight: 600 }}
           >
-            Imprimir
+            {invoice.status === 'Despachada' ? 'Marcar como Pendiente' : 'Marcar como Despachada'}
           </Button>
           <Button
             variant="contained"
             startIcon={<ArrowForwardIcon />}
             onClick={() => navigate(`/quick-delivery/${invoice.id}`)}
+            sx={{ textTransform: 'none', fontWeight: 600 }}
           >
-            Nueva Entrega
+            Registrar Entrega
           </Button>
+          {/* ── SHARE BUTTON ── */}
+          <Tooltip title="Copia el enlace de seguimiento al portapapeles">
+            <Button
+              variant="outlined"
+              startIcon={<ShareIcon />}
+              onClick={handleShare}
+              sx={{
+                textTransform: 'none',
+                fontWeight: 600,
+                borderColor: 'primary.300',
+                color: 'primary.main',
+                '&:hover': { bgcolor: '#eff6ff', borderColor: 'primary.main' },
+              }}
+            >
+              Copiar enlace
+            </Button>
+          </Tooltip>
+          <IconButton onClick={() => window.print()} size="small">
+            <PrintIcon fontSize="small" />
+          </IconButton>
         </Stack>
       </Stack>
 
-      {/* Tarjeta principal */}
-      <Paper
-        elevation={0}
-        sx={{
-          borderRadius: 2,
-          overflow: 'hidden',
-          border: 1,
-          borderColor: 'divider'
-        }}
-      >
-        {/* Encabezado con estado y número */}
-        <Box sx={{
-          p: 3,
-          bgcolor: 'primary.light',
-          borderBottom: 1,
-          borderColor: 'divider'
-        }}>
-          <Grid container alignItems="center" spacing={2}>
-            <Grid item xs={12} md={6}>
-              <Stack direction="row" alignItems="center" spacing={2}>
-                <Avatar
-                  sx={{
-                    bgcolor: 'primary.main',
-                    width: 56,
-                    height: 56
-                  }}
-                >
-                  <DescriptionIcon />
-                </Avatar>
-                <Box>
-                  <Typography variant="h4" fontWeight={700} color="primary.contrastText">
-                    {invoice.invoiceNumber}
-                  </Typography>
-                  <Typography variant="body2" color="primary.contrastText" sx={{ opacity: 0.9 }}>
-                    {formatDate(invoice.createdAt)}
-                  </Typography>
-                </Box>
-              </Stack>
-            </Grid>
+      {/* ── Two-column layout ─────────────────────────────────── */}
+      <Grid container spacing={3}>
 
-            <Grid item xs={12} md={6}>
-              <Stack direction="row" spacing={2} justifyContent="flex-end">
-                <Chip
-                  label={invoice.status}
-                  color={getStatusColor(invoice.status)}
-                  size="medium"
-                  sx={{
-                    fontWeight: 700,
-                    fontSize: '1rem',
-                    minWidth: 140,
-                    height: 40
-                  }}
-                />
-                <Button
-                  variant={invoice.status === 'Despachada' ? 'outlined' : 'contained'}
-                  color={invoice.status === 'Despachada' ? 'primary' : 'success'}
-                  startIcon={updating ? <CircularProgress size={20} /> : <CheckIcon />}
-                  onClick={handleStatusChange}
-                  disabled={updating}
-                  sx={{
-                    textTransform: 'none',
-                    fontWeight: 600,
-                    minWidth: 200
-                  }}
-                >
-                  {invoice.status === 'Despachada' ? 'Marcar Pendiente' : 'Marcar Despachada'}
-                </Button>
-              </Stack>
-            </Grid>
-          </Grid>
-        </Box>
+        {/* LEFT COLUMN */}
+        <Grid item xs={12} lg={4}>
+          <Stack spacing={3}>
 
-        {/* Tabs para navegación */}
-        <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-          <Tabs
-            value={activeTab}
-            onChange={(_, newValue) => setActiveTab(newValue)}
-            sx={{
-              '& .MuiTab-root': {
-                textTransform: 'none',
-                fontSize: '1rem',
-                fontWeight: 500
-              }
-            }}
-          >
-            <Tab
-              label={
-                <Stack direction="row" alignItems="center" spacing={1}>
-                  <PersonIcon fontSize="small" />
-                  <span>Información</span>
+            {/* Cliente */}
+            <Card elevation={0} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2.5 }}>
+              <CardContent sx={{ p: 3 }}>
+                <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2.5 }}>
+                  <Stack direction="row" spacing={1.5} alignItems="center">
+                    <Avatar sx={{ bgcolor: 'primary.50', width: 36, height: 36 }}>
+                      <PersonIcon sx={{ color: 'primary.main', fontSize: 18 }} />
+                    </Avatar>
+                    <Typography variant="subtitle1" fontWeight={700}>Datos del Cliente</Typography>
+                  </Stack>
+                  <IconButton size="small" onClick={() => setIsEditing(!isEditing)} color="primary">
+                    <EditIcon fontSize="small" />
+                  </IconButton>
                 </Stack>
-              }
-            />
-            <Tab
-              label={
-                <Badge badgeContent={invoice.photos.length} color="primary">
-                  <Stack direction="row" alignItems="center" spacing={1}>
-                    <PhotoLibraryIcon fontSize="small" />
-                    <span>Imágenes</span>
-                  </Stack>
-                </Badge>
-              }
-            />
-            <Tab
-              label={
-                <Badge badgeContent={invoice.deliveries?.length || 0} color="secondary">
-                  <Stack direction="row" alignItems="center" spacing={1}>
-                    <HistoryIcon fontSize="small" />
-                    <span>Entregas</span>
-                  </Stack>
-                </Badge>
-              }
-            />
-          </Tabs>
-        </Box>
 
-        {/* Contenido de las tabs */}
-        <Box sx={{ p: 4 }}>
-          {activeTab === 0 && (
-            <Grid container spacing={4}>
-              {/* Columna izquierda - Información del cliente */}
-              <Grid item xs={12} md={6}>
-                <Card
-                  elevation={0}
-                  sx={{
-                    border: 1,
-                    borderColor: 'divider',
-                    borderRadius: 2
-                  }}
-                >
-                  <CardContent>
-                    <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 3 }}>
-                      <Typography variant="h6" fontWeight={600}>
-                        Información del Cliente
-                      </Typography>
-                      <IconButton
-                        onClick={() => setIsEditing(!isEditing)}
-                        color="primary"
-                        size="small"
+                {isEditing ? (
+                  <Stack spacing={2}>
+                    <TextField fullWidth label="Nombre" value={clientName} onChange={(e) => setClientName(e.target.value)} size="small" disabled={updating} />
+                    <TextField fullWidth label="Teléfono" value={clientPhone} onChange={(e) => setClientPhone(e.target.value)} size="small" disabled={updating} />
+                    <TextField fullWidth label="Dirección" value={clientAddress} onChange={(e) => setClientAddress(e.target.value)} multiline rows={2} size="small" disabled={updating} />
+                    <Stack direction="row" spacing={1}>
+                      <Button
+                        variant="contained" size="small"
+                        startIcon={updating ? <CircularProgress size={14} /> : <SaveIcon />}
+                        onClick={handleSaveEdit}
+                        disabled={updating || !clientName || !clientPhone}
+                        sx={{ textTransform: 'none' }}
                       >
-                        <EditIcon />
-                      </IconButton>
+                        Guardar
+                      </Button>
+                      <Button variant="outlined" size="small" onClick={() => setIsEditing(false)} disabled={updating} sx={{ textTransform: 'none' }}>
+                        Cancelar
+                      </Button>
                     </Stack>
-
-                    {isEditing ? (
-                      <Stack spacing={3}>
-                        <TextField
-                          fullWidth
-                          label="Nombre del cliente"
-                          value={clientName}
-                          onChange={(e) => setClientName(e.target.value)}
-                          disabled={updating}
-                          variant="outlined"
-                          size="medium"
-                        />
-                        <TextField
-                          fullWidth
-                          label="Teléfono"
-                          value={clientPhone}
-                          onChange={(e) => setClientPhone(e.target.value)}
-                          disabled={updating}
-                          variant="outlined"
-                          size="medium"
-                        />
-                        <TextField
-                          fullWidth
-                          label="Dirección"
-                          value={clientAddress}
-                          onChange={(e) => setClientAddress(e.target.value)}
-                          multiline
-                          rows={3}
-                          disabled={updating}
-                          variant="outlined"
-                          size="medium"
-                        />
-                        <Stack direction="row" spacing={2}>
-                          <Button
-                            variant="contained"
-                            startIcon={updating ? <CircularProgress size={20} /> : <SaveIcon />}
-                            onClick={handleSaveEdit}
-                            disabled={updating || !clientName || !clientPhone}
-                            sx={{ textTransform: 'none' }}
-                          >
-                            Guardar Cambios
-                          </Button>
-                          <Button
-                            variant="outlined"
-                            startIcon={<CancelIcon />}
-                            onClick={() => setIsEditing(false)}
-                            disabled={updating}
-                            sx={{ textTransform: 'none' }}
-                          >
-                            Cancelar
-                          </Button>
-                        </Stack>
-                      </Stack>
-                    ) : (
-                      <Stack spacing={3}>
-                        <Stack spacing={1}>
-                          <Typography variant="subtitle2" color="text.secondary">
-                            Nombre completo
-                          </Typography>
-                          <Typography variant="body1" fontWeight={500}>
-                            {invoice.clientName}
-                          </Typography>
-                        </Stack>
-
-                        <Stack spacing={1}>
-                          <Typography variant="subtitle2" color="text.secondary">
-                            Contacto
-                          </Typography>
-                          <Stack direction="row" spacing={2} alignItems="center">
-                            <Typography variant="body1" fontWeight={500}>
-                              {invoice.clientPhone}
-                            </Typography>
-                            <Tooltip title="Enviar WhatsApp">
-                              <IconButton
-                                onClick={handleWhatsApp}
-                                color="success"
-                                size="small"
-                                sx={{ bgcolor: 'success.light' }}
-                              >
-                                <WhatsAppIcon fontSize="small" />
-                              </IconButton>
-                            </Tooltip>
-                            <Tooltip title="Llamar">
-                              <IconButton
-                                onClick={handleCall}
-                                color="primary"
-                                size="small"
-                                sx={{ bgcolor: 'primary.light' }}
-                              >
-                                <PhoneIcon fontSize="small" />
-                              </IconButton>
-                            </Tooltip>
-                          </Stack>
-                        </Stack>
-
-                        {invoice.clientAddress && (
-                          <Stack spacing={1}>
-                            <Typography variant="subtitle2" color="text.secondary">
-                              Dirección de entrega
-                            </Typography>
-                            <Stack direction="row" spacing={1} alignItems="flex-start">
-                              <LocationIcon fontSize="small" sx={{ color: 'text.secondary', mt: 0.5 }} />
-                              <Typography variant="body1" fontWeight={500}>
-                                {invoice.clientAddress}
-                              </Typography>
-                            </Stack>
-                          </Stack>
-                        )}
-                      </Stack>
-                    )}
-                  </CardContent>
-                </Card>
-              </Grid>
-
-              {/* Información del Cliente */}
-              
-
-              {/* Columna derecha - Información de la factura */}
-              <Grid item xs={12} md={6}>
-                <Card
-                  elevation={0}
-                  sx={{
-                    border: 1,
-                    borderColor: 'divider',
-                    borderRadius: 2
-                  }}
-                >
-                  <CardContent>
-                    <Typography variant="h6" fontWeight={600} sx={{ mb: 3 }}>
-                      Información del Documento
-                    </Typography>
-
-                    <TableContainer>
-                      <Table size="small">
-                        <TableBody>
-                          <TableRow>
-                            <TableCell sx={{ border: 'none', color: 'text.secondary' }}>
-                              <Stack direction="row" alignItems="center" spacing={1}>
-                                <CalendarIcon fontSize="small" />
-                                <span>Creada:</span>
-                              </Stack>
-                            </TableCell>
-                            <TableCell sx={{ border: 'none', fontWeight: 500 }}>
-                              {formatDate(invoice.createdAt)}
-                            </TableCell>
-                          </TableRow>
-                          <TableRow>
-                            <TableCell sx={{ border: 'none', color: 'text.secondary' }}>
-                              <Stack direction="row" alignItems="center" spacing={1}>
-                                <CalendarIcon fontSize="small" />
-                                <span>Actualizada:</span>
-                              </Stack>
-                            </TableCell>
-                            <TableCell sx={{ border: 'none', fontWeight: 500 }}>
-                              {formatDate(invoice.updatedAt)}
-                            </TableCell>
-                          </TableRow>
-                          {invoice.deliveredAt && (
-                            <TableRow>
-                              <TableCell sx={{ border: 'none', color: 'text.secondary' }}>
-                                <Stack direction="row" alignItems="center" spacing={1}>
-                                  <CheckIcon fontSize="small" />
-                                  <span>Despachada:</span>
-                                </Stack>
-                              </TableCell>
-                              <TableCell sx={{ border: 'none', fontWeight: 500 }}>
-                                {formatDate(invoice.deliveredAt)}
-                              </TableCell>
-                            </TableRow>
-                          )}
-                          {invoice.userEmail && (
-                            <TableRow>
-                              <TableCell sx={{ border: 'none', color: 'text.secondary' }}>
-                                <Stack direction="row" alignItems="center" spacing={1}>
-                                  <EmailIcon fontSize="small" />
-                                  <span>Creada por:</span>
-                                </Stack>
-                              </TableCell>
-                              <TableCell sx={{ border: 'none', fontWeight: 500 }}>
-                                {invoice.userEmail}
-                              </TableCell>
-                            </TableRow>
-                          )}
-                        </TableBody>
-                      </Table>
-                    </TableContainer>
-
-                    {/* Estadísticas rápidas */}
-                    <Box sx={{
-                      mt: 4,
-                      p: 2,
-                      bgcolor: 'grey.50',
-                      borderRadius: 1,
-                      border: 1,
-                      borderColor: 'divider'
-                    }}>
-                      <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
-                        Resumen
+                  </Stack>
+                ) : (
+                  <Stack spacing={2.5}>
+                    <Box>
+                      <Typography variant="caption" color="text.secondary" fontWeight={500} sx={{ textTransform: 'uppercase', letterSpacing: 0.5, fontSize: '0.68rem' }}>
+                        Nombre
                       </Typography>
-                      <Grid container spacing={2}>
-                        <Grid item xs={6}>
-                          <Stack alignItems="center">
-                            <Typography variant="h5" fontWeight={700} color="primary.main">
-                              {invoice.photos.length}
-                            </Typography>
-                            <Typography variant="caption" color="text.secondary">
-                              Imágenes
-                            </Typography>
-                          </Stack>
-                        </Grid>
-                        <Grid item xs={6}>
-                          <Stack alignItems="center">
-                            <Typography variant="h5" fontWeight={700} color="secondary.main">
-                              {invoice.deliveries?.length || 0}
-                            </Typography>
-                            <Typography variant="caption" color="text.secondary">
-                              Entregas
-                            </Typography>
-                          </Stack>
-                        </Grid>
-                      </Grid>
+                      <Typography variant="body1" fontWeight={600} sx={{ mt: 0.25 }}>{invoice.clientName}</Typography>
                     </Box>
-                  </CardContent>
-                </Card>
-              </Grid>
-            </Grid>
-          )}
 
-          {activeTab === 1 && invoice.photos.length > 0 && (
-            <Box>
-              <Typography variant="h6" fontWeight={600} sx={{ mb: 3 }}>
-                Galería de Imágenes ({invoice.photos.length})
-              </Typography>
-              <Grid container spacing={3}>
-                {invoice.photos.map((photo, index) => (
-                  <Grid item xs={12} sm={6} md={4} lg={3} key={index}>
-                    <Card
-                      sx={{
-                        height: '100%',
-                        cursor: 'pointer',
-                        transition: 'all 0.2s',
-                        '&:hover': {
-                          transform: 'translateY(-4px)',
-                          boxShadow: 4
-                        }
-                      }}
-                      onClick={() => {
-                        setSelectedImageIndex(index);
-                        setSelectedDelivery(null);
-                        setImageDialogOpen(true);
-                      }}
-                    >
-                      <Box sx={{ position: 'relative', pt: '75%' }}>
-                        <Box
-                          component="img"
-                          src={photo}
-                          alt={`Factura ${index + 1}`}
-                          sx={{
-                            position: 'absolute',
-                            top: 0,
-                            left: 0,
-                            width: '100%',
-                            height: '100%',
-                            objectFit: 'cover',
-                            borderTopLeftRadius: 8,
-                            borderTopRightRadius: 8,
-                          }}
-                        />
-                        <Box
-                          sx={{
-                            position: 'absolute',
-                            top: 8,
-                            right: 8,
-                            bgcolor: 'rgba(0,0,0,0.5)',
-                            color: 'white',
-                            borderRadius: 1,
-                            px: 1,
-                            py: 0.5,
-                          }}
-                        >
-                          <Typography variant="caption">
-                            #{index + 1}
-                          </Typography>
-                        </Box>
-                      </Box>
-                      <CardContent>
-                        <Stack direction="row" justifyContent="space-between" alignItems="center">
-                          <Typography variant="body2" color="text.secondary">
-                            Imagen {index + 1}
-                          </Typography>
-                          <IconButton size="small">
-                            <FullscreenIcon fontSize="small" />
+                    <Box>
+                      <Typography variant="caption" color="text.secondary" fontWeight={500} sx={{ textTransform: 'uppercase', letterSpacing: 0.5, fontSize: '0.68rem' }}>
+                        Teléfono
+                      </Typography>
+                      <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 0.25 }}>
+                        <Typography variant="body1" fontWeight={600}>{invoice.clientPhone}</Typography>
+                        <Tooltip title="WhatsApp">
+                          <IconButton
+                            size="small"
+                            sx={{ bgcolor: '#dcfce7', color: '#16a34a', '&:hover': { bgcolor: '#bbf7d0' } }}
+                            onClick={() => window.open(`https://wa.me/57${invoice.clientPhone.replace(/\D/g, '')}`, '_blank')}
+                          >
+                            <WhatsAppIcon sx={{ fontSize: 15 }} />
                           </IconButton>
-                        </Stack>
-                      </CardContent>
-                    </Card>
-                  </Grid>
-                ))}
-              </Grid>
-            </Box>
-          )}
+                        </Tooltip>
+                        <Tooltip title="Llamar">
+                          <IconButton
+                            size="small"
+                            sx={{ bgcolor: '#eff6ff', color: '#2563eb', '&:hover': { bgcolor: '#dbeafe' } }}
+                            onClick={() => (window.location.href = `tel:${invoice.clientPhone}`)}
+                          >
+                            <PhoneIcon sx={{ fontSize: 15 }} />
+                          </IconButton>
+                        </Tooltip>
+                      </Stack>
+                    </Box>
 
-          {activeTab === 2 && invoice.deliveries && invoice.deliveries.length > 0 && (
-            <Box>
-              <Typography variant="h6" fontWeight={600} sx={{ mb: 3 }}>
-                Historial de Entregas ({invoice.deliveries.length})
-              </Typography>
-              <Grid container spacing={3}>
-                {invoice.deliveries.map((delivery: any, index: number) => (
-                  <Grid item xs={12} md={6} key={index}>
-                    <Card
-                      elevation={1}
-                      sx={{
-                        height: '100%',
-                        borderLeft: 4,
-                        borderColor: 'primary.main',
-                        borderRadius: 2
-                      }}
-                    >
-                      <CardContent>
-                        <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: 2 }}>
+                    {invoice.clientAddress && (
+                      <Box>
+                        <Typography variant="caption" color="text.secondary" fontWeight={500} sx={{ textTransform: 'uppercase', letterSpacing: 0.5, fontSize: '0.68rem' }}>
+                          Dirección de entrega
+                        </Typography>
+                        <Stack direction="row" spacing={0.75} alignItems="flex-start" sx={{ mt: 0.25 }}>
+                          <LocationIcon sx={{ fontSize: 16, color: 'text.secondary', mt: 0.2 }} />
+                          <Typography variant="body2" fontWeight={500}>{invoice.clientAddress}</Typography>
+                        </Stack>
+                      </Box>
+                    )}
+
+                    {/* Quick share from client card */}
+                    <Box sx={{ pt: 1, borderTop: '1px solid', borderColor: 'divider' }}>
+                      <Button
+                        fullWidth
+                        variant="outlined"
+                        size="small"
+                        startIcon={<ShareIcon />}
+                        onClick={handleShare}
+                        sx={{
+                          textTransform: 'none',
+                          fontWeight: 600,
+                          borderColor: 'primary.200',
+                          color: 'primary.main',
+                          borderStyle: 'dashed',
+                          '&:hover': { bgcolor: '#eff6ff', borderStyle: 'solid' },
+                        }}
+                      >
+                        Copiar enlace de seguimiento
+                      </Button>
+                    </Box>
+                  </Stack>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Registro del documento */}
+            <Card elevation={0} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2.5 }}>
+              <CardContent sx={{ p: 3 }}>
+                <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 2.5 }}>
+                  <Avatar sx={{ bgcolor: 'grey.100', width: 36, height: 36 }}>
+                    <DescriptionIcon sx={{ color: 'text.secondary', fontSize: 18 }} />
+                  </Avatar>
+                  <Typography variant="subtitle1" fontWeight={700}>Registro del Documento</Typography>
+                </Stack>
+
+                <Stack spacing={1.5}>
+                  {[
+                    { label: 'Fecha de creación', value: formatDate(invoice.createdAt), Icon: CalendarIcon },
+                    { label: 'Última actualización', value: formatDate(invoice.updatedAt), Icon: CalendarIcon },
+                    ...(invoice.deliveredAt ? [{ label: 'Fecha de despacho', value: formatDate(invoice.deliveredAt), Icon: CheckIcon }] : []),
+                    ...(invoice.userEmail ? [{ label: 'Registrado por', value: invoice.userEmail, Icon: EmailIcon }] : []),
+                  ].map(({ label, value, Icon }) => (
+                    <Box key={label}>
+                      <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: 0.5, fontSize: '0.68rem', fontWeight: 500 }}>
+                        {label}
+                      </Typography>
+                      <Stack direction="row" spacing={0.75} alignItems="center" sx={{ mt: 0.25 }}>
+                        <Icon sx={{ fontSize: 14, color: 'text.disabled' }} />
+                        <Typography variant="body2" fontWeight={500}>{value}</Typography>
+                      </Stack>
+                    </Box>
+                  ))}
+                </Stack>
+
+                {/* Stats */}
+                <Box sx={{ mt: 3, pt: 2.5, borderTop: '1px solid', borderColor: 'divider' }}>
+                  <Grid container spacing={1}>
+                    {[
+                      { label: 'Fotos adjuntas', value: totalPhotos, color: 'primary' },
+                      { label: 'Entregas', value: invoice.deliveries?.length || 0, color: 'secondary' },
+                    ].map(({ label, value, color }) => (
+                      <Grid item xs={6} key={label}>
+                        <Box sx={{ textAlign: 'center', p: 1.5, bgcolor: 'grey.50', borderRadius: 2 }}>
+                          <Typography variant="h4" fontWeight={800} color={`${color}.main`}>{value}</Typography>
+                          <Typography variant="caption" color="text.secondary">{label}</Typography>
+                        </Box>
+                      </Grid>
+                    ))}
+                  </Grid>
+                </Box>
+              </CardContent>
+            </Card>
+          </Stack>
+        </Grid>
+
+        {/* RIGHT COLUMN */}
+        <Grid item xs={12} lg={8}>
+          <Stack spacing={3}>
+
+            {/* ── Fotos de la factura ───────────────────────────── */}
+            {invoice.photos.length > 0 && (
+              <Card elevation={0} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2.5 }}>
+                <CardContent sx={{ p: 3 }}>
+                  <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2.5 }}>
+                    <Stack direction="row" spacing={1.5} alignItems="center">
+                      <Avatar sx={{ bgcolor: 'primary.50', width: 36, height: 36 }}>
+                        <ImageIcon sx={{ color: 'primary.main', fontSize: 18 }} />
+                      </Avatar>
+                      <Box>
+                        <Typography variant="subtitle1" fontWeight={700}>Fotos de la Factura</Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {invoice.photos.length} imagen{invoice.photos.length !== 1 ? 'es' : ''} adjunta{invoice.photos.length !== 1 ? 's' : ''}
+                        </Typography>
+                      </Box>
+                    </Stack>
+                  </Stack>
+                  <PhotoGrid
+                    photos={invoice.photos}
+                    onOpen={(idx) => openLightbox(invoice.photos, idx, `Factura ${invoice.invoiceNumber}`)}
+                  />
+                </CardContent>
+              </Card>
+            )}
+
+            {/* ── Historial de entregas ─────────────────────────── */}
+            {invoice.deliveries && invoice.deliveries.length > 0 ? (
+              <Card elevation={0} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2.5 }}>
+                <CardContent sx={{ p: 3 }}>
+                  <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 2.5 }}>
+                    <Avatar sx={{ bgcolor: 'secondary.50', width: 36, height: 36 }}>
+                      <HistoryIcon sx={{ color: 'secondary.main', fontSize: 18 }} />
+                    </Avatar>
+                    <Box>
+                      <Typography variant="subtitle1" fontWeight={700}>Historial de Entregas</Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {invoice.deliveries.length} entrega{invoice.deliveries.length !== 1 ? 's' : ''} registrada{invoice.deliveries.length !== 1 ? 's' : ''}
+                      </Typography>
+                    </Box>
+                  </Stack>
+
+                  <Stack spacing={2.5}>
+                    {invoice.deliveries.map((delivery: any, index: number) => (
+                      <Box
+                        key={index}
+                        sx={{
+                          p: 2.5, border: '1px solid', borderColor: 'divider',
+                          borderLeft: '4px solid', borderLeftColor: 'primary.main',
+                          borderRadius: '0 12px 12px 0', bgcolor: 'grey.50',
+                        }}
+                      >
+                        <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: 1.5 }}>
                           <Box>
-                            <Typography variant="h6" fontWeight={600} color="primary.main">
+                            <Typography variant="subtitle2" fontWeight={700} color="primary.main">
                               Entrega #{index + 1}
                             </Typography>
-                            <Typography variant="body2" color="text.secondary">
+                            <Typography variant="caption" color="text.secondary">
                               {delivery.date ? formatDate(delivery.date.toDate()) : 'Fecha no disponible'}
                             </Typography>
                           </Box>
-                          <Chip
-                            label={`Por: ${delivery.deliveredBy || 'Sistema'}`}
-                            size="small"
-                            variant="outlined"
-                          />
+                          <Chip label={`Por: ${delivery.deliveredBy || 'Sistema'}`} size="small" variant="outlined" sx={{ fontSize: '0.72rem', height: 22 }} />
                         </Stack>
 
                         {delivery.notes && (
-                          <Box sx={{
-                            mb: 3,
-                            p: 2,
-                            bgcolor: 'grey.50',
-                            borderRadius: 1,
-                            borderLeft: 3,
-                            borderColor: 'primary.light'
-                          }}>
-                            <Typography variant="body2" sx={{ fontStyle: 'italic' }}>
-                              {delivery.notes}
+                          <Box sx={{ mb: 2, p: 1.5, bgcolor: 'white', borderRadius: 1.5, border: '1px solid', borderColor: 'divider' }}>
+                            <Typography variant="body2" sx={{ fontStyle: 'italic', color: 'text.secondary' }}>
+                              "{delivery.notes}"
                             </Typography>
                           </Box>
                         )}
 
+                        {/* Delivery photos inline */}
                         {delivery.photos && delivery.photos.length > 0 && (
-                          <Box sx={{ mb: 3 }}>
-                            <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
-                              Imágenes ({delivery.photos.length})
+                          <Box>
+                            <Typography variant="caption" color="text.secondary" fontWeight={600} sx={{ mb: 1, display: 'block', textTransform: 'uppercase', letterSpacing: 0.5, fontSize: '0.68rem' }}>
+                              Fotos de esta entrega ({delivery.photos.length})
                             </Typography>
-                            <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 1 }}>
-                              {delivery.photos.map((photo: string, photoIndex: number) => (
-                                <Box
-                                  key={photoIndex}
-                                  component="img"
-                                  src={photo}
-                                  alt={`Entrega ${index + 1} - Foto ${photoIndex + 1}`}
-                                  sx={{
-                                    width: 80,
-                                    height: 80,
-                                    objectFit: 'cover',
-                                    borderRadius: 1,
-                                    cursor: 'pointer',
-                                    transition: 'all 0.2s',
-                                    '&:hover': {
-                                      transform: 'scale(1.05)',
-                                      boxShadow: 2
-                                    }
-                                  }}
-                                  onClick={() => {
-                                    setSelectedDelivery(index);
-                                    setSelectedImageIndex(photoIndex);
-                                    setImageDialogOpen(true);
-                                  }}
-                                />
-                              ))}
-                            </Stack>
+                            <PhotoGrid
+                              photos={delivery.photos}
+                              onOpen={(idx) => openLightbox(delivery.photos, idx, `Entrega #${index + 1}`)}
+                            />
                           </Box>
                         )}
 
                         {!delivery.notes && (
                           <Button
-                            variant="outlined"
                             size="small"
+                            variant="outlined"
                             startIcon={<NoteAddIcon />}
-                            onClick={() => {
-                              setSelectedDelivery(index);
-                              setEditDialogOpen(true);
-                            }}
-                            sx={{ textTransform: 'none' }}
+                            onClick={() => { setSelectedDelivery(index); setEditDialogOpen(true); }}
+                            sx={{ textTransform: 'none', mt: delivery.photos?.length ? 1.5 : 0 }}
                           >
-                            Agregar Nota
+                            Añadir nota
                           </Button>
                         )}
-                      </CardContent>
-                    </Card>
-                  </Grid>
-                ))}
-              </Grid>
-            </Box>
-          )}
-        </Box>
-      </Paper>
-
-      {/* Diálogo para ver imagen */}
-      <Dialog
-        open={imageDialogOpen}
-        onClose={() => setImageDialogOpen(false)}
-        maxWidth="lg"
-        fullWidth
-        PaperProps={{
-          sx: {
-            maxHeight: '90vh',
-            borderRadius: 2
-          }
-        }}
-      >
-        <DialogTitle>
-          <Stack direction="row" justifyContent="space-between" alignItems="center">
-            <Typography variant="h6">
-              {selectedDelivery !== null ? `Entrega #${selectedDelivery + 1}` : 'Factura'}
-            </Typography>
-            <IconButton onClick={() => setImageDialogOpen(false)}>
-              <CancelIcon />
-            </IconButton>
+                      </Box>
+                    ))}
+                  </Stack>
+                </CardContent>
+              </Card>
+            ) : (
+              <Card elevation={0} sx={{ border: '1px dashed', borderColor: 'divider', borderRadius: 2.5 }}>
+                <CardContent sx={{ p: 4, textAlign: 'center' }}>
+                  <ShippingIcon sx={{ fontSize: 40, color: 'text.disabled', mb: 1.5 }} />
+                  <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                    Sin entregas registradas
+                  </Typography>
+                  <Typography variant="body2" color="text.disabled" sx={{ mb: 2.5 }}>
+                    Registra la primera entrega para hacer seguimiento al despacho.
+                  </Typography>
+                  <Button
+                    variant="contained"
+                    startIcon={<ArrowForwardIcon />}
+                    onClick={() => navigate(`/quick-delivery/${invoice.id}`)}
+                    sx={{ textTransform: 'none' }}
+                  >
+                    Registrar primera entrega
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
           </Stack>
-        </DialogTitle>
-        <DialogContent>
-          {imageUrls && imageUrls[selectedImageIndex] && (
-            <Box sx={{
-              display: 'flex',
-              justifyContent: 'center',
-              alignItems: 'center',
-              minHeight: 400
-            }}>
-              <Box
-                component="img"
-                src={imageUrls[selectedImageIndex]}
-                alt="Imagen ampliada"
-                sx={{
-                  maxWidth: '100%',
-                  maxHeight: '70vh',
-                  objectFit: 'contain',
-                  borderRadius: 1
-                }}
-              />
-            </Box>
-          )}
-        </DialogContent>
-      </Dialog>
+        </Grid>
+      </Grid>
 
-      {/* Diálogo para agregar nota */}
+      {/* ── Lightbox ──────────────────────────────────────────── */}
+      <Lightbox
+        open={lightboxOpen}
+        photos={lightboxPhotos}
+        index={lightboxIndex}
+        title={lightboxTitle}
+        onClose={() => setLightboxOpen(false)}
+        onNavigate={setLightboxIndex}
+      />
+
+      {/* ── Snackbar enlace copiado ────────────────────────────── */}
+      <Snackbar
+        open={snackCopied}
+        autoHideDuration={2500}
+        onClose={() => setSnackCopied(false)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert severity="success" variant="filled" sx={{ borderRadius: 2, fontWeight: 600 }}>
+          ✓ Enlace copiado — pégalo donde quieras enviarlo
+        </Alert>
+      </Snackbar>
+
+      {/* ── Add note dialog ────────────────────────────────────── */}
       <Dialog
         open={editDialogOpen}
         onClose={() => setEditDialogOpen(false)}
         maxWidth="sm"
         fullWidth
-        PaperProps={{
-          sx: { borderRadius: 2 }
-        }}
+        PaperProps={{ sx: { borderRadius: 2.5 } }}
       >
         <DialogTitle>
-          <Typography variant="h6">
-            Agregar Nota a la Entrega
+          <Typography variant="h6" fontWeight={700}>
+            Añadir nota a la entrega #{selectedDelivery !== null ? selectedDelivery + 1 : ''}
           </Typography>
         </DialogTitle>
         <DialogContent>
           <TextField
             autoFocus
             multiline
-            rows={6}
+            rows={5}
             fullWidth
             variant="outlined"
-            placeholder="Describe los detalles de esta entrega..."
+            placeholder="Escribe los detalles de esta entrega…"
             value={editNotes}
             onChange={(e) => setEditNotes(e.target.value)}
-            sx={{ mt: 2 }}
-            InputProps={{
-              sx: { fontSize: '0.95rem' }
-            }}
+            sx={{ mt: 1.5 }}
           />
         </DialogContent>
         <DialogActions sx={{ p: 3, pt: 0 }}>
-          <Button
-            onClick={() => setEditDialogOpen(false)}
-            variant="outlined"
-            sx={{ textTransform: 'none' }}
-          >
+          <Button onClick={() => setEditDialogOpen(false)} variant="outlined" sx={{ textTransform: 'none' }}>
             Cancelar
           </Button>
           <Button
             variant="contained"
             startIcon={<SaveIcon />}
-            onClick={() => {
-              if (selectedDelivery !== null) {
-                handleAddDeliveryNote(selectedDelivery, editNotes);
-              }
-            }}
+            onClick={() => selectedDelivery !== null && handleAddDeliveryNote(selectedDelivery, editNotes)}
             disabled={!editNotes.trim()}
             sx={{ textTransform: 'none' }}
           >
-            Guardar Nota
+            Guardar nota
           </Button>
         </DialogActions>
       </Dialog>

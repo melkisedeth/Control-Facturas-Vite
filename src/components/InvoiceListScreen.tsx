@@ -31,52 +31,322 @@ import {
   InputAdornment,
   Container,
   Stack,
-  alpha,
   Tooltip,
   List,
   ListItem,
-  ListItemText,
-  ListItemAvatar,
   ListItemButton,
   Alert,
   LinearProgress,
-  SpeedDial,
-  SpeedDialAction,
-  SpeedDialIcon,
   Fade,
   Zoom,
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  DialogActions,
   Drawer,
+  Snackbar,
 } from '@mui/material';
 import {
   Search as SearchIcon,
   Add as AddIcon,
   Phone as PhoneIcon,
-  LocationOn as LocationIcon,
   CalendarToday as CalendarIcon,
   LocalShipping as ShippingIcon,
-  AdminPanelSettings as AdminIcon,
   Visibility as VisibilityIcon,
   Logout as LogoutIcon,
-  Person as PersonIcon,
   FilterList as FilterIcon,
   Refresh as RefreshIcon,
   CheckCircle as CheckCircleIcon,
   Pending as PendingIcon,
   Inventory as InventoryIcon,
-  FileCopy as FileCopyIcon,
   PhotoCamera as PhotoCameraIcon,
   MoreVert as MoreVertIcon,
-  QrCode as QrCodeIcon,
-  CloudUpload as CloudUploadIcon,
   Sort as SortIcon,
   Assignment as AssignmentIcon,
   Group as GroupIcon,
   Dashboard as DashboardIcon,
   Download as DownloadIcon,
   Print as PrintIcon,
+  Close as CloseIcon,
+  ChevronLeft as ChevronLeftIcon,
+  ChevronRight as ChevronRightIcon,
+  Image as ImageIcon,
   Share as ShareIcon,
+  WhatsApp as WhatsAppIcon,
+  ContentCopy as CopyIcon,
+  Check as CheckIcon,
+  OpenInNew as OpenInNewIcon,
 } from '@mui/icons-material';
 
+// ─── Tracking URL helper ───────────────────────────────────────────────────────
+const getTrackingUrl = (invoiceId: string) =>
+  `${window.location.origin}/Control-Facturas-Vite/tracking/${invoiceId}`;
+
+// ─── Share Dialog ──────────────────────────────────────────────────────────────
+const ShareDialog: React.FC<{
+  open: boolean;
+  invoiceId: string;
+  invoiceNumber: string;
+  clientPhone?: string;
+  onClose: () => void;
+}> = ({ open, invoiceId, invoiceNumber, clientPhone, onClose }) => {
+  const [copied, setCopied] = useState(false);
+  const url = getTrackingUrl(invoiceId);
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(url);
+    } catch {
+      const el = document.createElement('textarea');
+      el.value = url;
+      document.body.appendChild(el);
+      el.select();
+      document.execCommand('copy');
+      document.body.removeChild(el);
+    }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2500);
+  };
+
+  const handleWhatsApp = () => {
+    const msg = encodeURIComponent(
+      `Hola — Factura *${invoiceNumber}*, puedes ver el estado de tu pedido aquí:\n${url}`
+    );
+    const phone = clientPhone ? `57${clientPhone.replace(/\D/g, '')}` : '';
+    window.open(`https://wa.me/${phone}?text=${msg}`, '_blank');
+  };
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth PaperProps={{ sx: { borderRadius: 3 } }}>
+      <DialogTitle>
+        <Stack direction="row" alignItems="center" spacing={1.5}>
+          <Box sx={{ width: 36, height: 36, borderRadius: 1.5, bgcolor: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <ShareIcon sx={{ color: '#3b82f6', fontSize: 18 }} />
+          </Box>
+          <Box>
+            <Typography variant="subtitle1" fontWeight={700}>Compartir seguimiento</Typography>
+            <Typography variant="caption" color="text.secondary">Factura {invoiceNumber}</Typography>
+          </Box>
+        </Stack>
+      </DialogTitle>
+      <DialogContent>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2.5 }}>
+          Comparte este enlace con tu cliente para que pueda ver el estado de su pedido en tiempo real, sin necesidad de iniciar sesión.
+        </Typography>
+        <TextField
+          fullWidth
+          value={url}
+          size="small"
+          InputProps={{
+            readOnly: true,
+            sx: { fontFamily: 'monospace', fontSize: '0.8rem', bgcolor: '#f8fafc' },
+            endAdornment: (
+              <InputAdornment position="end">
+                <Tooltip title={copied ? '¡Copiado!' : 'Copiar'}>
+                  <IconButton size="small" onClick={handleCopy} color={copied ? 'success' : 'default'}>
+                    {copied ? <CheckIcon fontSize="small" /> : <CopyIcon fontSize="small" />}
+                  </IconButton>
+                </Tooltip>
+              </InputAdornment>
+            ),
+          }}
+          sx={{ mb: 3 }}
+        />
+        <Typography variant="caption" color="text.secondary" fontWeight={600} sx={{ textTransform: 'uppercase', letterSpacing: 0.5, fontSize: '0.68rem', display: 'block', mb: 1.5 }}>
+          Compartir vía
+        </Typography>
+        <Stack direction="row" spacing={1.5} flexWrap="wrap">
+          <Button
+            variant="contained"
+            startIcon={<WhatsAppIcon />}
+            onClick={handleWhatsApp}
+            sx={{ bgcolor: '#16a34a', '&:hover': { bgcolor: '#15803d' }, textTransform: 'none', fontWeight: 600, borderRadius: 2 }}
+          >
+            WhatsApp
+          </Button>
+          <Button
+            variant="outlined"
+            startIcon={copied ? <CheckIcon /> : <CopyIcon />}
+            onClick={handleCopy}
+            color={copied ? 'success' : 'inherit'}
+            sx={{ textTransform: 'none', fontWeight: 600, borderRadius: 2 }}
+          >
+            {copied ? 'Copiado' : 'Copiar enlace'}
+          </Button>
+          <Tooltip title="Abrir en nueva pestaña">
+            <IconButton size="small" onClick={() => window.open(url, '_blank')} sx={{ border: '1px solid', borderColor: 'divider' }}>
+              <OpenInNewIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        </Stack>
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 3 }}>
+        <Button onClick={onClose} variant="outlined" sx={{ textTransform: 'none' }}>Cerrar</Button>
+      </DialogActions>
+    </Dialog>
+  );
+};
+
+// ─── Image Preview Modal ──────────────────────────────────────────────────────
+const ImagePreviewModal: React.FC<{
+  open: boolean;
+  photos: string[];
+  initialIndex: number;
+  invoiceNumber: string;
+  onClose: () => void;
+}> = ({ open, photos, initialIndex, invoiceNumber, onClose }) => {
+  const [currentIndex, setCurrentIndex] = useState(initialIndex);
+
+  useEffect(() => {
+    setCurrentIndex(initialIndex);
+  }, [initialIndex, open]);
+
+  const handlePrev = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setCurrentIndex((prev) => (prev - 1 + photos.length) % photos.length);
+  };
+
+  const handleNext = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setCurrentIndex((prev) => (prev + 1) % photos.length);
+  };
+
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if (!open) return;
+      if (e.key === 'ArrowLeft') setCurrentIndex((p) => (p - 1 + photos.length) % photos.length);
+      if (e.key === 'ArrowRight') setCurrentIndex((p) => (p + 1) % photos.length);
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [open, photos.length, onClose]);
+
+  if (!photos.length) return null;
+
+  return (
+    <Dialog
+      open={open}
+      onClose={onClose}
+      maxWidth="lg"
+      fullWidth
+      PaperProps={{
+        sx: {
+          bgcolor: 'rgba(10,10,20,0.97)',
+          borderRadius: 3,
+          overflow: 'hidden',
+          boxShadow: '0 40px 80px rgba(0,0,0,0.7)',
+        },
+      }}
+    >
+      <Box sx={{ px: 3, py: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+        <Stack direction="row" alignItems="center" spacing={2}>
+          <ImageIcon sx={{ color: 'rgba(255,255,255,0.5)', fontSize: 20 }} />
+          <Typography variant="subtitle1" sx={{ color: 'white', fontWeight: 600 }}>
+            Factura {invoiceNumber}
+          </Typography>
+          <Chip
+            label={`${currentIndex + 1} / ${photos.length}`}
+            size="small"
+            sx={{ bgcolor: 'rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.8)', fontWeight: 600, fontSize: '0.75rem' }}
+          />
+        </Stack>
+        <IconButton onClick={onClose} sx={{ color: 'rgba(255,255,255,0.6)', '&:hover': { color: 'white' } }}>
+          <CloseIcon />
+        </IconButton>
+      </Box>
+
+      <Box sx={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 480, bgcolor: 'rgba(0,0,0,0.4)', p: 2 }}>
+        {photos.length > 1 && (
+          <IconButton
+            onClick={handlePrev}
+            sx={{ position: 'absolute', left: 12, zIndex: 2, bgcolor: 'rgba(255,255,255,0.12)', color: 'white', backdropFilter: 'blur(6px)', '&:hover': { bgcolor: 'rgba(255,255,255,0.25)' } }}
+          >
+            <ChevronLeftIcon />
+          </IconButton>
+        )}
+        <Box
+          component="img"
+          src={photos[currentIndex]}
+          alt={`Foto ${currentIndex + 1}`}
+          sx={{ maxWidth: '100%', maxHeight: '70vh', objectFit: 'contain', borderRadius: 2, boxShadow: '0 20px 60px rgba(0,0,0,0.5)' }}
+        />
+        {photos.length > 1 && (
+          <IconButton
+            onClick={handleNext}
+            sx={{ position: 'absolute', right: 12, zIndex: 2, bgcolor: 'rgba(255,255,255,0.12)', color: 'white', backdropFilter: 'blur(6px)', '&:hover': { bgcolor: 'rgba(255,255,255,0.25)' } }}
+          >
+            <ChevronRightIcon />
+          </IconButton>
+        )}
+      </Box>
+
+      {photos.length > 1 && (
+        <Box sx={{ display: 'flex', gap: 1, p: 2, overflowX: 'auto', bgcolor: 'rgba(0,0,0,0.3)', borderTop: '1px solid rgba(255,255,255,0.06)', justifyContent: photos.length <= 6 ? 'center' : 'flex-start' }}>
+          {photos.map((photo, idx) => (
+            <Box
+              key={idx}
+              component="img"
+              src={photo}
+              alt={`Miniatura ${idx + 1}`}
+              onClick={() => setCurrentIndex(idx)}
+              sx={{
+                width: 64, height: 64, objectFit: 'cover', borderRadius: 1.5, cursor: 'pointer', flexShrink: 0,
+                border: idx === currentIndex ? '2px solid #60a5fa' : '2px solid transparent',
+                opacity: idx === currentIndex ? 1 : 0.5,
+                transition: 'all 0.2s',
+                '&:hover': { opacity: 0.9, transform: 'scale(1.05)' },
+              }}
+            />
+          ))}
+        </Box>
+      )}
+    </Dialog>
+  );
+};
+
+// ─── Photo Strip Preview ───────────────────────────────────────────────────────
+const PhotoStrip: React.FC<{
+  photos: string[];
+  onPhotoClick: (index: number) => void;
+}> = ({ photos, onPhotoClick }) => {
+  const MAX_VISIBLE = 4;
+  const visible = photos.slice(0, MAX_VISIBLE);
+  const overflow = photos.length - MAX_VISIBLE;
+
+  return (
+    <Stack direction="row" spacing={0.75} alignItems="center">
+      {visible.map((photo, idx) => (
+        <Box
+          key={idx}
+          component="img"
+          src={photo}
+          alt={`Foto ${idx + 1}`}
+          onClick={(e) => { e.stopPropagation(); onPhotoClick(idx); }}
+          sx={{
+            width: 52, height: 52, objectFit: 'cover', borderRadius: 1.5, cursor: 'pointer',
+            border: '2px solid transparent', transition: 'all 0.2s',
+            '&:hover': { border: '2px solid', borderColor: 'primary.main', transform: 'scale(1.08)', boxShadow: 3 },
+          }}
+        />
+      ))}
+      {overflow > 0 && (
+        <Box
+          onClick={(e) => { e.stopPropagation(); onPhotoClick(MAX_VISIBLE); }}
+          sx={{
+            width: 52, height: 52, borderRadius: 1.5, bgcolor: 'primary.50', border: '2px solid', borderColor: 'primary.200',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0,
+            transition: 'all 0.2s', '&:hover': { bgcolor: 'primary.100', transform: 'scale(1.05)' },
+          }}
+        >
+          <Typography variant="caption" fontWeight={700} color="primary.main">+{overflow}</Typography>
+        </Box>
+      )}
+    </Stack>
+  );
+};
+
+// ─── Main Component ───────────────────────────────────────────────────────────
 const InvoiceListScreenDesktop: React.FC = () => {
   const navigate = useNavigate();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -87,20 +357,45 @@ const InvoiceListScreenDesktop: React.FC = () => {
   const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [sortBy, setSortBy] = useState<'date' | 'status' | 'client'>('date');
-  const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
-  const [quickActionsOpen, setQuickActionsOpen] = useState(false);
-  const [stats, setStats] = useState({
-    pending: 0,
-    delivered: 0,
-    partial: 0,
-    total: 0,
-  });
+  const [stats, setStats] = useState({ pending: 0, delivered: 0, partial: 0, total: 0 });
 
-  const open = Boolean(anchorEl);
+  // Image preview state
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewPhotos, setPreviewPhotos] = useState<string[]>([]);
+  const [previewIndex, setPreviewIndex] = useState(0);
+  const [previewInvoiceNumber, setPreviewInvoiceNumber] = useState('');
+
+  // Share snack state
+  const [snackCopied, setSnackCopied] = useState(false);
+
+  const menuOpen = Boolean(anchorEl);
+
+  const openPhotoPreview = (invoice: Invoice, index: number) => {
+    setPreviewPhotos(invoice.photos);
+    setPreviewIndex(index);
+    setPreviewInvoiceNumber(invoice.invoiceNumber);
+    setPreviewOpen(true);
+  };
+
+  const handleShare = async (e: React.MouseEvent, invoice: Invoice) => {
+    e.stopPropagation();
+    if (!invoice.id) return;
+    const url = getTrackingUrl(invoice.id);
+    try {
+      await navigator.clipboard.writeText(url);
+    } catch {
+      const el = document.createElement('textarea');
+      el.value = url;
+      document.body.appendChild(el);
+      el.select();
+      document.execCommand('copy');
+      document.body.removeChild(el);
+    }
+    setSnackCopied(true);
+  };
 
   useEffect(() => {
     const auth = getAuth();
-
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
         setCurrentUserEmail(user.email);
@@ -113,36 +408,22 @@ const InvoiceListScreenDesktop: React.FC = () => {
         navigate('/login');
       }
     });
-
     fetchInvoices();
-
     return () => unsubscribe();
   }, [navigate]);
 
   useEffect(() => {
-    // Actualizar estadísticas cuando cambian las facturas
-    const pending = invoices.filter(inv => inv.status === 'Pendiente').length;
-    const delivered = invoices.filter(inv => inv.status === 'Despachada').length;
-    const partial = invoices.filter(inv => inv.status === 'Parcial').length;
-    
-    setStats({
-      pending,
-      delivered,
-      partial,
-      total: invoices.length,
-    });
+    const pending = invoices.filter((inv) => inv.status === 'Pendiente').length;
+    const delivered = invoices.filter((inv) => inv.status === 'Despachada').length;
+    const partial = invoices.filter((inv) => inv.status === 'Parcial').length;
+    setStats({ pending, delivered, partial, total: invoices.length });
   }, [invoices]);
 
   const fetchInvoices = async () => {
     try {
       setLoading(true);
-      const q = query(
-        collection(db, 'invoices'),
-        orderBy('createdAt', 'desc'),
-        limit(200)
-      );
+      const q = query(collection(db, 'invoices'), orderBy('createdAt', 'desc'), limit(200));
       const snapshot = await getDocs(q);
-
       const invoicesList: Invoice[] = [];
       snapshot.forEach((doc) => {
         const data = doc.data();
@@ -161,7 +442,6 @@ const InvoiceListScreenDesktop: React.FC = () => {
           userId: data.userId,
         });
       });
-
       setInvoices(invoicesList);
     } catch (error) {
       console.error('Error fetching invoices:', error);
@@ -188,161 +468,66 @@ const InvoiceListScreenDesktop: React.FC = () => {
 
   const getFilteredInvoices = () => {
     let filtered = invoices;
-    
-    // Filtrar por tab
-    if (tabIndex === 0) {
-      filtered = filtered.filter(inv => inv.status !== 'Despachada');
-    } else {
-      filtered = filtered.filter(inv => inv.status === 'Despachada');
-    }
-    
-    // Filtrar por búsqueda
+    filtered = tabIndex === 0
+      ? filtered.filter((inv) => inv.status !== 'Despachada')
+      : filtered.filter((inv) => inv.status === 'Despachada');
+
     if (search) {
-      const searchLower = search.toLowerCase();
-      filtered = filtered.filter((invoice) =>
-        invoice.invoiceNumber.toLowerCase().includes(searchLower) ||
-        invoice.clientName.toLowerCase().includes(searchLower) ||
-        invoice.clientPhone.includes(search) ||
-        (invoice.userEmail?.toLowerCase().includes(searchLower) ?? false)
+      const s = search.toLowerCase();
+      filtered = filtered.filter(
+        (inv) =>
+          inv.invoiceNumber.toLowerCase().includes(s) ||
+          inv.clientName.toLowerCase().includes(s) ||
+          inv.clientPhone.includes(search) ||
+          (inv.userEmail?.toLowerCase().includes(s) ?? false)
       );
     }
-    
-    // Ordenar
+
     filtered.sort((a, b) => {
       switch (sortBy) {
-        case 'date':
-          return b.createdAt.getTime() - a.createdAt.getTime();
-        case 'client':
-          return a.clientName.localeCompare(b.clientName);
-        case 'status':
-          return a.status.localeCompare(b.status);
-        default:
-          return 0;
+        case 'date': return b.createdAt.getTime() - a.createdAt.getTime();
+        case 'client': return a.clientName.localeCompare(b.clientName);
+        case 'status': return a.status.localeCompare(b.status);
+        default: return 0;
       }
     });
-    
+
     return filtered;
   };
 
-  const handleQuickDelivery = (invoice: Invoice) => {
-    if (invoice.id) {
-      navigate(`/quick-delivery/${invoice.id}`);
-    }
+  const getPriorityColor = (invoice: Invoice) => {
+    const days = Math.floor((new Date().getTime() - invoice.createdAt.getTime()) / 86400000);
+    if (days > 7) return '#ef4444';
+    if (days > 3) return '#f97316';
+    return '#22c55e';
   };
 
-  const handleViewDetails = (invoice: Invoice) => {
-    if (invoice.id) {
-      navigate(`/invoice/${invoice.id}`);
-    }
-  };
-
-  const handleAddInvoice = () => {
-    navigate('/capture');
-  };
-
-  const handleAdminPanel = () => {
-    navigate('/admin');
-    handleCloseMenu();
-  };
-
-  const handleClientsPanel = () => {
-    navigate('/clients');
-    handleCloseMenu();
-  };
-
-  const handleMenuClick = (event: React.MouseEvent<HTMLElement>) => {
-    setAnchorEl(event.currentTarget);
-  };
-
-  const handleCloseMenu = () => {
-    setAnchorEl(null);
-  };
+  const formatDate = (date: Date) => format(date, 'dd MMM yyyy · HH:mm', { locale: es });
 
   const handleLogout = async () => {
     try {
-      const auth = getAuth();
-      await signOut(auth);
-      handleCloseMenu();
-    } catch (error) {
-      console.error('Error al cerrar sesión:', error);
+      await signOut(getAuth());
+      setAnchorEl(null);
+    } catch (e) {
+      console.error(e);
     }
   };
 
-  const getInitials = (email: string | null) => {
-    if (!email) return '?';
-    return email.charAt(0).toUpperCase();
-  };
-
-  const formatDate = (date: Date) => {
-    return format(date, 'dd MMM yyyy HH:mm', { locale: es });
-  };
-
-  const getPriorityColor = (invoice: Invoice) => {
-    const daysDiff = Math.floor((new Date().getTime() - invoice.createdAt.getTime()) / (1000 * 3600 * 24));
-    if (daysDiff > 7) return '#ff6b6b';
-    if (daysDiff > 3) return '#ffa726';
-    return '#66bb6a';
-  };
-
-  const handleExportData = () => {
-    // Función para exportar datos
-    console.log('Exportando datos...');
-  };
-
-  const handlePrintList = () => {
-    // Función para imprimir lista
-    window.print();
-  };
-
-  const quickActions = [
-    { icon: <AddIcon />, name: 'Nueva Factura', action: handleAddInvoice },
-    { icon: <GroupIcon />, name: 'Clientes', action: handleClientsPanel },
-    { icon: <DownloadIcon />, name: 'Exportar', action: handleExportData },
-    { icon: <PrintIcon />, name: 'Imprimir', action: handlePrintList },
-  ];
+  const getInitials = (email: string | null) => (email ? email.charAt(0).toUpperCase() : '?');
 
   const filteredInvoices = getFilteredInvoices();
 
   return (
-    <Box sx={{ 
-      minHeight: '100vh', 
-      bgcolor: 'grey.50',
-      background: 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)'
-    }}>
-      {/* Header Mejorado */}
-      <AppBar
-        position="sticky"
-        elevation={1}
-        sx={{
-          bgcolor: 'background.paper',
-          borderBottom: 1,
-          borderColor: 'divider',
-          backdropFilter: 'blur(10px)',
-          background: 'rgba(255, 255, 255, 0.95)'
-        }}
-      >
-        <Toolbar sx={{ px: { xs: 2, md: 4 }, py: 1.5 }}>
+    <Box sx={{ minHeight: '100vh', bgcolor: '#f8fafc' }}>
+      {/* ── AppBar ─────────────────────────────────────────────── */}
+      <AppBar position="sticky" elevation={0} sx={{ bgcolor: 'white', borderBottom: '1px solid', borderColor: 'divider' }}>
+        <Toolbar sx={{ px: { xs: 2, md: 4 }, py: 1 }}>
           <Stack direction="row" alignItems="center" spacing={2} sx={{ flexGrow: 1 }}>
-            <Box sx={{ 
-              width: 40, 
-              height: 40, 
-              bgcolor: 'primary.main', 
-              borderRadius: 2,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}>
-              <AssignmentIcon sx={{ color: 'white' }} />
+            <Box sx={{ width: 38, height: 38, bgcolor: 'primary.main', borderRadius: 2, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <AssignmentIcon sx={{ color: 'white', fontSize: 20 }} />
             </Box>
             <Box>
-              <Typography
-                variant="h6"
-                sx={{
-                  fontWeight: 700,
-                  color: 'text.primary',
-                  fontSize: '1.3rem'
-                }}
-              >
+              <Typography variant="h6" sx={{ fontWeight: 700, color: 'text.primary', lineHeight: 1.2 }}>
                 Gestión de Facturas
               </Typography>
               <Typography variant="caption" color="text.secondary">
@@ -351,614 +536,327 @@ const InvoiceListScreenDesktop: React.FC = () => {
             </Box>
           </Stack>
 
-          {/* Estadísticas rápidas */}
+          {/* Quick stats */}
           <Stack direction="row" spacing={3} sx={{ display: { xs: 'none', lg: 'flex' }, mr: 4 }}>
-            <Tooltip title="Facturas Pendientes">
-              <Stack alignItems="center" spacing={0.5}>
-                <Badge badgeContent={stats.pending} color="error" max={99}>
-                  <PendingIcon color="action" />
-                </Badge>
-                <Typography variant="caption" color="text.secondary">
-                  Pendientes
-                </Typography>
-              </Stack>
-            </Tooltip>
-            
-            <Tooltip title="Facturas Parciales">
-              <Stack alignItems="center" spacing={0.5}>
-                <Badge badgeContent={stats.partial} color="warning" max={99}>
-                  <InventoryIcon color="action" />
-                </Badge>
-                <Typography variant="caption" color="text.secondary">
-                  Parciales
-                </Typography>
-              </Stack>
-            </Tooltip>
-            
-            <Tooltip title="Facturas Despachadas">
-              <Stack alignItems="center" spacing={0.5}>
-                <Badge badgeContent={stats.delivered} color="success" max={99}>
-                  <CheckCircleIcon color="action" />
-                </Badge>
-                <Typography variant="caption" color="text.secondary">
-                  Despachadas
-                </Typography>
-              </Stack>
-            </Tooltip>
+            {[
+              { label: 'Pendientes', value: stats.pending, color: 'error', Icon: PendingIcon },
+              { label: 'Parciales', value: stats.partial, color: 'warning', Icon: InventoryIcon },
+              { label: 'Despachadas', value: stats.delivered, color: 'success', Icon: CheckCircleIcon },
+            ].map(({ label, value, color, Icon }) => (
+              <Tooltip key={label} title={label}>
+                <Stack alignItems="center" spacing={0.5}>
+                  <Badge badgeContent={value} color={color as any} max={99}>
+                    <Icon color="action" fontSize="small" />
+                  </Badge>
+                  <Typography variant="caption" color="text.secondary">{label}</Typography>
+                </Stack>
+              </Tooltip>
+            ))}
           </Stack>
 
-          {/* Avatar y menú */}
-          <Stack direction="row" spacing={2} alignItems="center">
-            <Tooltip title="Acciones rápidas">
-              <IconButton
-                size="small"
-                onClick={() => setQuickActionsOpen(!quickActionsOpen)}
-                sx={{
-                  bgcolor: 'primary.main',
-                  color: 'white',
-                  '&:hover': {
-                    bgcolor: 'primary.dark',
-                  }
-                }}
-              >
-                <SpeedDialIcon />
-              </IconButton>
-            </Tooltip>
-
-            <IconButton
-              onClick={handleMenuClick}
-              size="small"
-              sx={{
-                border: 1,
-                borderColor: 'divider',
-                bgcolor: 'background.paper'
-              }}
+          <Stack direction="row" spacing={1.5} alignItems="center">
+            <Button
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={() => navigate('/capture')}
+              sx={{ textTransform: 'none', fontWeight: 600, borderRadius: 2 }}
             >
-              <Avatar
-                sx={{
-                  width: 36,
-                  height: 36,
-                  bgcolor: 'primary.main',
-                  fontSize: '0.875rem'
-                }}
-              >
+              Nueva Factura
+            </Button>
+            <IconButton onClick={(e) => setAnchorEl(e.currentTarget)} sx={{ border: '1px solid', borderColor: 'divider' }}>
+              <Avatar sx={{ width: 32, height: 32, bgcolor: 'primary.main', fontSize: '0.8rem' }}>
                 {getInitials(currentUserEmail)}
               </Avatar>
             </IconButton>
           </Stack>
 
-          {/* Menú desplegable */}
-          <Menu
-            anchorEl={anchorEl}
-            open={open}
-            onClose={handleCloseMenu}
-            PaperProps={{
-              sx: {
-                mt: 1.5,
-                minWidth: 240,
-                borderRadius: 2,
-                boxShadow: 3
-              }
-            }}
-          >
+          <Menu anchorEl={anchorEl} open={menuOpen} onClose={() => setAnchorEl(null)} PaperProps={{ sx: { mt: 1.5, minWidth: 220, borderRadius: 2 } }}>
             <MenuItem disabled sx={{ opacity: 1 }}>
               <Stack spacing={0.5}>
-                <Typography variant="body2" fontWeight={500}>
-                  {currentUserEmail}
-                </Typography>
-                <Chip 
-                  label={isAdmin ? 'Administrador' : 'Usuario'} 
-                  size="small" 
+                <Typography variant="body2" fontWeight={500}>{currentUserEmail}</Typography>
+                <Chip
+                  label={isAdmin ? 'Administrador' : 'Usuario'}
+                  size="small"
                   color={isAdmin ? 'primary' : 'default'}
-                  sx={{ height: 20, fontSize: '0.7rem' }}
+                  sx={{ height: 18, fontSize: '0.68rem' }}
                 />
               </Stack>
             </MenuItem>
-
             <Divider />
-
-            <MenuItem onClick={handleAdminPanel} disabled={!isAdmin}>
+            <MenuItem onClick={() => { navigate('/admin'); setAnchorEl(null); }} disabled={!isAdmin}>
               <DashboardIcon fontSize="small" sx={{ mr: 2, color: 'primary.main' }} />
               Panel Administrativo
             </MenuItem>
-
-            <MenuItem onClick={handleClientsPanel}>
+            <MenuItem onClick={() => { navigate('/clients'); setAnchorEl(null); }}>
               <GroupIcon fontSize="small" sx={{ mr: 2, color: 'primary.main' }} />
-              Gestión de Clientes
+              Clientes
             </MenuItem>
-
-            <MenuItem onClick={handleExportData}>
-              <DownloadIcon fontSize="small" sx={{ mr: 2, color: 'primary.main' }} />
-              Exportar Datos
-            </MenuItem>
-
             <Divider />
-
             <MenuItem onClick={handleLogout}>
               <LogoutIcon fontSize="small" sx={{ mr: 2, color: 'error.main' }} />
-              <Typography color="error.main">
-                Cerrar Sesión
-              </Typography>
+              <Typography color="error.main">Cerrar Sesión</Typography>
             </MenuItem>
           </Menu>
         </Toolbar>
       </AppBar>
 
-      {/* Main Content */}
+      {/* ── Content ────────────────────────────────────────────── */}
       <Container maxWidth="xl" sx={{ py: 3 }}>
-        {/* Panel de Control */}
-        <Paper
-          elevation={0}
-          sx={{
-            p: 3,
-            mb: 3,
-            borderRadius: 3,
-            bgcolor: 'white',
-            boxShadow: '0 4px 20px rgba(0,0,0,0.08)'
-          }}
-        >
-          {/* Barra de búsqueda y filtros */}
-          <Grid container spacing={3} alignItems="center" sx={{ mb: 3 }}>
+        {/* Filter bar */}
+        <Paper elevation={0} sx={{ p: 3, mb: 3, borderRadius: 3, border: '1px solid', borderColor: 'divider' }}>
+          <Grid container spacing={2} alignItems="center" sx={{ mb: 2.5 }}>
             <Grid item xs={12} md={8}>
               <TextField
                 fullWidth
-                variant="outlined"
-                placeholder="Buscar por número de factura, cliente o teléfono..."
+                placeholder="Buscar por número, cliente o teléfono…"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                size="medium"
+                size="small"
                 InputProps={{
                   startAdornment: (
                     <InputAdornment position="start">
-                      <SearchIcon color="action" />
+                      <SearchIcon color="action" fontSize="small" />
                     </InputAdornment>
                   ),
-                  sx: { 
-                    borderRadius: 2,
-                    bgcolor: 'grey.50'
-                  }
+                  sx: { borderRadius: 2 },
                 }}
               />
             </Grid>
-            
             <Grid item xs={12} md={4}>
-              <Stack direction="row" spacing={2} justifyContent="flex-end">
-                <Tooltip title="Ordenar por">
-                  <Button
-                    variant="outlined"
-                    startIcon={<SortIcon />}
-                    onClick={() => {
-                      const sorts = ['date', 'client', 'status'] as const;
-                      const currentIndex = sorts.indexOf(sortBy);
-                      setSortBy(sorts[(currentIndex + 1) % sorts.length]);
-                    }}
-                    sx={{ textTransform: 'none' }}
-                  >
-                    {sortBy === 'date' && 'Fecha'}
-                    {sortBy === 'client' && 'Cliente'}
-                    {sortBy === 'status' && 'Estado'}
-                  </Button>
-                </Tooltip>
-                
-                <Tooltip title="Actualizar lista">
-                  <IconButton 
-                    onClick={fetchInvoices} 
-                    disabled={loading}
-                    sx={{ 
-                      bgcolor: 'primary.main', 
-                      color: 'white',
-                      '&:hover': { bgcolor: 'primary.dark' }
-                    }}
-                  >
-                    <RefreshIcon />
+              <Stack direction="row" spacing={1} justifyContent="flex-end">
+                <Button
+                  variant="outlined"
+                  size="small"
+                  startIcon={<SortIcon />}
+                  onClick={() => {
+                    const sorts = ['date', 'client', 'status'] as const;
+                    setSortBy(sorts[(sorts.indexOf(sortBy) + 1) % sorts.length]);
+                  }}
+                  sx={{ textTransform: 'none' }}
+                >
+                  {sortBy === 'date' && 'Por Fecha'}
+                  {sortBy === 'client' && 'Por Cliente'}
+                  {sortBy === 'status' && 'Por Estado'}
+                </Button>
+                <Tooltip title="Actualizar">
+                  <IconButton onClick={fetchInvoices} disabled={loading} size="small" sx={{ bgcolor: 'primary.50' }}>
+                    <RefreshIcon fontSize="small" color="primary" />
                   </IconButton>
                 </Tooltip>
               </Stack>
             </Grid>
           </Grid>
 
-          {/* Tabs Mejoradas */}
-          <Paper 
-            elevation={0} 
-            sx={{ 
-              borderRadius: 2, 
-              bgcolor: 'grey.50',
-              mb: 3
+          <Tabs
+            value={tabIndex}
+            onChange={(_, v) => setTabIndex(v)}
+            sx={{
+              bgcolor: 'grey.100', borderRadius: 2, p: 0.5, minHeight: 44,
+              '& .MuiTabs-indicator': { display: 'none' },
+              '& .MuiTab-root': {
+                textTransform: 'none', fontSize: '0.9rem', fontWeight: 500, minHeight: 36, borderRadius: 1.5, color: 'text.secondary',
+                '&.Mui-selected': { bgcolor: 'white', color: 'primary.main', fontWeight: 700, boxShadow: '0 1px 4px rgba(0,0,0,0.12)' },
+              },
             }}
           >
-            <Tabs
-              value={tabIndex}
-              onChange={(_, value) => setTabIndex(value)}
-              variant="fullWidth"
-              sx={{
-                '& .MuiTab-root': {
-                  py: 2,
-                  textTransform: 'none',
-                  fontSize: '1rem',
-                  fontWeight: 500,
-                  borderRadius: 2,
-                  transition: 'all 0.2s',
-                  '&.Mui-selected': {
-                    bgcolor: 'white',
-                    boxShadow: 1,
-                    color: 'primary.main',
-                  }
-                }
-              }}
-            >
-              <Tab 
-                label={
-                  <Stack direction="row" alignItems="center" spacing={1}>
-                    <PendingIcon fontSize="small" />
-                    <span>Pendientes</span>
-                    {stats.pending > 0 && (
-                      <Chip
-                        label={stats.pending}
-                        size="small"
-                        color="error"
-                        sx={{ height: 20, fontSize: '0.75rem' }}
-                      />
-                    )}
-                  </Stack>
-                }
-              />
-              <Tab 
-                label={
-                  <Stack direction="row" alignItems="center" spacing={1}>
-                    <CheckCircleIcon fontSize="small" />
-                    <span>Despachadas</span>
-                    {stats.delivered > 0 && (
-                      <Chip
-                        label={stats.delivered}
-                        size="small"
-                        color="success"
-                        sx={{ height: 20, fontSize: '0.75rem' }}
-                      />
-                    )}
-                  </Stack>
-                }
-              />
-            </Tabs>
-          </Paper>
+            <Tab
+              label={
+                <Stack direction="row" alignItems="center" spacing={1}>
+                  <PendingIcon sx={{ fontSize: 16 }} />
+                  <span>Pendientes y Parciales</span>
+                  {stats.pending + stats.partial > 0 && (
+                    <Chip label={stats.pending + stats.partial} size="small" color="error" sx={{ height: 18, fontSize: '0.7rem' }} />
+                  )}
+                </Stack>
+              }
+            />
+            <Tab
+              label={
+                <Stack direction="row" alignItems="center" spacing={1}>
+                  <CheckCircleIcon sx={{ fontSize: 16 }} />
+                  <span>Despachadas</span>
+                  {stats.delivered > 0 && (
+                    <Chip label={stats.delivered} size="small" color="success" sx={{ height: 18, fontSize: '0.7rem' }} />
+                  )}
+                </Stack>
+              }
+            />
+          </Tabs>
 
-          {/* Indicador de carga */}
-          {loading && (
-            <LinearProgress sx={{ mb: 3, borderRadius: 2 }} />
-          )}
-
-          {/* Contador de resultados */}
-          <Alert 
-            severity="info" 
-            sx={{ 
-              mb: 3, 
-              borderRadius: 2,
-              bgcolor: 'primary.50',
-              border: '1px solid',
-              borderColor: 'primary.100'
-            }}
-          >
-            <Typography variant="body2">
-              Mostrando <strong>{filteredInvoices.length}</strong> de <strong>{stats.total}</strong> facturas
-              {search && ` para la búsqueda: "${search}"`}
-            </Typography>
-          </Alert>
+          {loading && <LinearProgress sx={{ mt: 2, borderRadius: 2 }} />}
         </Paper>
 
-        {/* Lista de Facturas - Vista Mejorada */}
+        {/* Results info */}
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2, px: 0.5 }}>
+          Mostrando <strong>{filteredInvoices.length}</strong> de <strong>{stats.total}</strong> facturas
+          {search && ` · búsqueda: "${search}"`}
+        </Typography>
+
+        {/* ── Invoice List ─────────────────────────────────────── */}
         {loading ? (
-          <Box sx={{ 
-            display: 'flex', 
-            justifyContent: 'center', 
-            py: 8,
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: 3
-          }}>
-            <CircularProgress size={60} />
-            <Typography color="text.secondary">
-              Cargando facturas...
-            </Typography>
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 10 }}>
+            <CircularProgress size={48} />
           </Box>
         ) : filteredInvoices.length === 0 ? (
-          <Paper
-            sx={{
-              p: 8,
-              textAlign: 'center',
-              borderRadius: 3,
-              bgcolor: 'white',
-              boxShadow: '0 4px 20px rgba(0,0,0,0.05)'
-            }}
-          >
-            <Box sx={{ 
-              width: 80, 
-              height: 80, 
-              bgcolor: 'grey.100', 
-              borderRadius: '50%',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              mb: 3,
-              mx: 'auto'
-            }}>
-              {tabIndex === 0 ? (
-                <CheckCircleIcon sx={{ fontSize: 40, color: 'success.main' }} />
-              ) : (
-                <PendingIcon sx={{ fontSize: 40, color: 'warning.main' }} />
-              )}
-            </Box>
-            <Typography variant="h6" color="text.secondary" gutterBottom>
-              {search ? 'No se encontraron facturas' :
-                tabIndex === 0 ? '¡Todo al día!' :
-                  'No hay facturas despachadas'}
+          <Paper sx={{ p: 8, textAlign: 'center', borderRadius: 3, border: '1px solid', borderColor: 'divider' }}>
+            <Typography variant="h6" color="text.secondary">
+              {search ? 'Sin resultados para esa búsqueda' : tabIndex === 0 ? '¡Todo al día!' : 'Sin facturas despachadas'}
             </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 4, maxWidth: 400, mx: 'auto' }}>
-              {search ? 'Prueba con otros términos de búsqueda o revisa la ortografía' :
-                tabIndex === 0 ? 'Todas las facturas han sido procesadas correctamente' :
-                  'Las facturas despachadas aparecerán aquí'}
-            </Typography>
-            {tabIndex === 0 && !search && (
-              <Button
-                variant="contained"
-                size="large"
-                startIcon={<AddIcon />}
-                onClick={handleAddInvoice}
-                sx={{ borderRadius: 2 }}
-              >
-                Registrar Nueva Factura
-              </Button>
-            )}
           </Paper>
         ) : (
-          <List sx={{ 
-            bgcolor: 'transparent',
-            p: 0
-          }}>
+          <Stack spacing={1.5}>
             {filteredInvoices.map((invoice, index) => (
-              <Fade in={true} timeout={300} key={invoice.id}>
-                <ListItem
-                  disablePadding
+              <Fade in key={invoice.id} timeout={200} style={{ transitionDelay: `${Math.min(index * 30, 300)}ms` }}>
+                <Paper
+                  elevation={0}
                   sx={{
-                    mb: 2,
-                    animation: `fadeIn 0.5s ease ${index * 0.1}s both`,
-                    '@keyframes fadeIn': {
-                      '0%': { opacity: 0, transform: 'translateY(20px)' },
-                      '100%': { opacity: 1, transform: 'translateY(0)' },
-                    }
+                    borderRadius: 2.5, border: '1px solid', borderColor: 'divider', overflow: 'hidden',
+                    transition: 'all 0.2s ease',
+                    '&:hover': { borderColor: 'primary.300', boxShadow: '0 4px 20px rgba(0,0,0,0.08)', transform: 'translateY(-1px)' },
                   }}
                 >
-                  <Paper
-                    elevation={0}
+                  <Box
                     sx={{
-                      width: '100%',
-                      borderRadius: 3,
-                      bgcolor: 'white',
-                      border: '1px solid',
-                      borderColor: 'divider',
-                      overflow: 'hidden',
-                      transition: 'all 0.3s ease',
-                      '&:hover': {
-                        boxShadow: '0 8px 30px rgba(0,0,0,0.12)',
-                        transform: 'translateY(-2px)',
-                        borderColor: 'primary.light',
-                      }
+                      display: 'grid',
+                      gridTemplateColumns: { xs: '1fr', md: '1fr 1fr 1fr auto' },
+                      alignItems: 'center',
+                      p: 2.5,
+                      gap: 2,
+                      cursor: 'pointer',
                     }}
+                    onClick={() => invoice.id && navigate(`/invoice/${invoice.id}`)}
                   >
-                    <ListItemButton 
-                      onClick={() => handleViewDetails(invoice)}
-                      sx={{ 
-                        p: 3,
-                        '&:hover': {
-                          bgcolor: 'grey.50'
-                        }
-                      }}
-                    >
-                      <Grid container spacing={3} alignItems="center">
-                        {/* Columna 1: Información Principal */}
-                        <Grid item xs={12} md={4}>
-                          <Stack spacing={2}>
-                            <Stack direction="row" spacing={2} alignItems="center">
-                              <Box sx={{ 
-                                width: 12, 
-                                height: 12, 
-                                borderRadius: '50%',
-                                bgcolor: getPriorityColor(invoice)
-                              }} />
-                              <Typography variant="h6" fontWeight={600} color="primary">
-                                {invoice.invoiceNumber}
-                              </Typography>
-                            </Stack>
-                            
-                            <Stack spacing={1}>
-                              <Typography variant="subtitle1" fontWeight={500}>
-                                {invoice.clientName}
-                              </Typography>
-                              
-                              <Stack direction="row" spacing={2}>
-                                <Stack direction="row" spacing={1} alignItems="center">
-                                  <PhoneIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
-                                  <Typography variant="body2" color="text.secondary">
-                                    {invoice.clientPhone}
-                                  </Typography>
-                                </Stack>
-                                
-                                <Stack direction="row" spacing={1} alignItems="center">
-                                  <CalendarIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
-                                  <Typography variant="body2" color="text.secondary">
-                                    {formatDate(invoice.createdAt)}
-                                  </Typography>
-                                </Stack>
-                              </Stack>
-                            </Stack>
-                          </Stack>
-                        </Grid>
-
-                        {/* Columna 2: Estado y Detalles */}
-                        <Grid item xs={12} md={3}>
-                          <Stack spacing={2}>
-                            <Chip
-                              icon={getStatusIcon(invoice.status)}
-                              label={invoice.status}
-                              color={getStatusColor(invoice.status)}
-                              sx={{ 
-                                fontWeight: 600,
-                                width: 'fit-content'
-                              }}
-                            />
-                            
-                            {invoice.deliveries?.length > 0 && (
-                              <Stack direction="row" spacing={1} alignItems="center">
-                                <ShippingIcon sx={{ fontSize: 16, color: 'primary.main' }} />
-                                <Typography variant="body2" color="primary.main">
-                                  {invoice.deliveries.length} entrega(s)
-                                </Typography>
-                              </Stack>
-                            )}
-                          </Stack>
-                        </Grid>
-
-                        {/* Columna 3: Fotos */}
-                        <Grid item xs={12} md={2}>
-                          {invoice.photos.length > 0 ? (
-                            <Tooltip title={`${invoice.photos.length} fotos adjuntas`}>
-                              <Stack direction="row" spacing={1} alignItems="center">
-                                <PhotoCameraIcon sx={{ color: 'primary.main' }} />
-                                <Box sx={{ 
-                                  width: 24, 
-                                  height: 24, 
-                                  bgcolor: 'primary.50',
-                                  borderRadius: 1,
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center'
-                                }}>
-                                  <Typography variant="caption" color="primary.main" fontWeight={600}>
-                                    {invoice.photos.length}
-                                  </Typography>
-                                </Box>
-                              </Stack>
-                            </Tooltip>
-                          ) : (
-                            <Typography variant="caption" color="text.secondary">
-                              Sin fotos
+                    {/* Col 1: Invoice info */}
+                    <Stack spacing={1}>
+                      <Stack direction="row" spacing={1.5} alignItems="center">
+                        <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: getPriorityColor(invoice), flexShrink: 0 }} />
+                        <Typography variant="subtitle1" fontWeight={700} color="primary.main">
+                          {invoice.invoiceNumber}
+                        </Typography>
+                        <Chip
+                          icon={getStatusIcon(invoice.status)}
+                          label={invoice.status}
+                          color={getStatusColor(invoice.status) as any}
+                          size="small"
+                          sx={{ fontWeight: 600, height: 22, fontSize: '0.7rem' }}
+                        />
+                      </Stack>
+                      <Typography variant="body2" fontWeight={500}>{invoice.clientName}</Typography>
+                      <Stack direction="row" spacing={2}>
+                        <Stack direction="row" spacing={0.5} alignItems="center">
+                          <PhoneIcon sx={{ fontSize: 13, color: 'text.disabled' }} />
+                          <Typography variant="caption" color="text.secondary">{invoice.clientPhone}</Typography>
+                        </Stack>
+                        <Stack direction="row" spacing={0.5} alignItems="center">
+                          <CalendarIcon sx={{ fontSize: 13, color: 'text.disabled' }} />
+                          <Typography variant="caption" color="text.secondary">{formatDate(invoice.createdAt)}</Typography>
+                        </Stack>
+                        {invoice.deliveries?.length > 0 && (
+                          <Stack direction="row" spacing={0.5} alignItems="center">
+                            <ShippingIcon sx={{ fontSize: 13, color: 'primary.main' }} />
+                            <Typography variant="caption" color="primary.main" fontWeight={600}>
+                              {invoice.deliveries.length} entrega{invoice.deliveries.length !== 1 ? 's' : ''}
                             </Typography>
-                          )}
-                        </Grid>
-
-                        {/* Columna 4: Acciones */}
-                        <Grid item xs={12} md={3}>
-                          <Stack direction="row" spacing={1} justifyContent="flex-end">
-                            <Tooltip title="Registrar entrega">
-                              <span>
-                                <Button
-                                  variant="contained"
-                                  size="small"
-                                  startIcon={<ShippingIcon />}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleQuickDelivery(invoice);
-                                  }}
-                                  disabled={invoice.status === 'Despachada'}
-                                  sx={{
-                                    textTransform: 'none',
-                                    fontWeight: 500,
-                                    borderRadius: 2,
-                                    minWidth: 140
-                                  }}
-                                >
-                                  {invoice.status === 'Pendiente' ? 'Despachar' : 'Agregar'}
-                                </Button>
-                              </span>
-                            </Tooltip>
-                            
-                            <Tooltip title="Ver detalles">
-                              <IconButton
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleViewDetails(invoice);
-                                }}
-                                sx={{
-                                  border: 1,
-                                  borderColor: 'divider'
-                                }}
-                              >
-                                <VisibilityIcon />
-                              </IconButton>
-                            </Tooltip>
-                            
-                            <Tooltip title="Más opciones">
-                              <IconButton
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setSelectedInvoice(invoice);
-                                }}
-                              >
-                                <MoreVertIcon />
-                              </IconButton>
-                            </Tooltip>
                           </Stack>
-                        </Grid>
-                      </Grid>
-                    </ListItemButton>
-                  </Paper>
-                </ListItem>
+                        )}
+                      </Stack>
+                    </Stack>
+
+                    {/* Col 2: Photos inline */}
+                    <Box onClick={(e) => e.stopPropagation()}>
+                      {invoice.photos.length > 0 ? (
+                        <Stack spacing={0.5}>
+                          <Typography variant="caption" color="text.secondary" fontWeight={500}>
+                            {invoice.photos.length} foto{invoice.photos.length !== 1 ? 's' : ''}
+                          </Typography>
+                          <PhotoStrip photos={invoice.photos} onPhotoClick={(idx) => openPhotoPreview(invoice, idx)} />
+                        </Stack>
+                      ) : (
+                        <Typography variant="caption" color="text.disabled">Sin fotos adjuntas</Typography>
+                      )}
+                    </Box>
+
+                    {/* Col 3: empty spacer on md */}
+                    <Box sx={{ display: { xs: 'none', md: 'block' } }} />
+
+                    {/* Col 4: Actions */}
+                    <Stack direction="row" spacing={1} alignItems="center" onClick={(e) => e.stopPropagation()}>
+                      <Tooltip title="Registrar entrega">
+                        <span>
+                          <Button
+                            variant="contained"
+                            size="small"
+                            startIcon={<ShippingIcon />}
+                            onClick={() => invoice.id && navigate(`/quick-delivery/${invoice.id}`)}
+                            disabled={invoice.status === 'Despachada'}
+                            sx={{ textTransform: 'none', fontWeight: 600, borderRadius: 1.5, fontSize: '0.8rem' }}
+                          >
+                            Despachar
+                          </Button>
+                        </span>
+                      </Tooltip>
+                      <Tooltip title="Ver detalles">
+                        <IconButton
+                          size="small"
+                          onClick={() => invoice.id && navigate(`/invoice/${invoice.id}`)}
+                          sx={{ border: '1px solid', borderColor: 'divider' }}
+                        >
+                          <VisibilityIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                      {/* ── SHARE BUTTON ── */}
+                      <Tooltip title="Copiar enlace de seguimiento">
+                        <IconButton
+                          size="small"
+                          onClick={(e) => handleShare(e, invoice)}
+                          sx={{
+                            border: '1px solid',
+                            borderColor: 'divider',
+                            '&:hover': { bgcolor: '#eff6ff', borderColor: 'primary.300' },
+                          }}
+                        >
+                          <ShareIcon fontSize="small" sx={{ color: 'primary.main' }} />
+                        </IconButton>
+                      </Tooltip>
+                    </Stack>
+                  </Box>
+                </Paper>
               </Fade>
             ))}
-          </List>
+          </Stack>
         )}
       </Container>
 
-      {/* Botón de Acción Rápida Flotante */}
-      <Zoom in={true}>
+      {/* FAB */}
+      <Zoom in>
         <Fab
           color="primary"
-          onClick={handleAddInvoice}
-          sx={{
-            position: 'fixed',
-            bottom: 32,
-            right: 32,
-            width: 56,
-            height: 56,
-            boxShadow: '0 8px 25px rgba(41, 98, 255, 0.3)',
-            '&:hover': {
-              boxShadow: '0 12px 30px rgba(41, 98, 255, 0.4)',
-              transform: 'scale(1.05)'
-            }
-          }}
+          onClick={() => navigate('/capture')}
+          sx={{ position: 'fixed', bottom: 28, right: 28, boxShadow: '0 8px 24px rgba(41,98,255,0.35)' }}
         >
           <AddIcon />
         </Fab>
       </Zoom>
 
-      {/* SpeedDial para acciones rápidas */}
-      {quickActionsOpen && (
-        <Box sx={{ 
-          position: 'fixed', 
-          bottom: 100, 
-          right: 32,
-          zIndex: 1000 
-        }}>
-          <Stack spacing={2} alignItems="flex-end">
-            {quickActions.map((action, index) => (
-              <Zoom in={true} timeout={300} style={{ transitionDelay: `${index * 100}ms` }} key={action.name}>
-                <Tooltip title={action.name} placement="left">
-                  <Fab
-                    size="medium"
-                    color="primary"
-                    onClick={action.action}
-                    sx={{
-                      width: 48,
-                      height: 48,
-                      boxShadow: 3
-                    }}
-                  >
-                    {action.icon}
-                  </Fab>
-                </Tooltip>
-              </Zoom>
-            ))}
-          </Stack>
-        </Box>
-      )}
+      {/* Image Preview Modal */}
+      <ImagePreviewModal
+        open={previewOpen}
+        photos={previewPhotos}
+        initialIndex={previewIndex}
+        invoiceNumber={previewInvoiceNumber}
+        onClose={() => setPreviewOpen(false)}
+      />
+
+      <Snackbar
+        open={snackCopied}
+        autoHideDuration={2500}
+        onClose={() => setSnackCopied(false)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert severity="success" variant="filled" sx={{ borderRadius: 2, fontWeight: 600 }}>
+          ✓ Enlace copiado — pégalo donde quieras enviarlo
+        </Alert>
+      </Snackbar>
     </Box>
   );
 };
