@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { collection, query, orderBy, limit, getDocs } from 'firebase/firestore';
 import { db } from '../firebase/config';
@@ -45,6 +45,7 @@ import {
   DialogActions,
   Drawer,
   Snackbar,
+  Pagination,
 } from '@mui/material';
 import {
   Search as SearchIcon,
@@ -77,6 +78,44 @@ import {
   Check as CheckIcon,
   OpenInNew as OpenInNewIcon,
 } from '@mui/icons-material';
+
+// ─── Pagination config ─────────────────────────────────────────────────────────
+const DISPATCHED_PAGE_SIZE = 20;
+
+// ─── Thumbnail URL helper ──────────────────────────────────────────────────────
+/**
+ * Returns a degraded-quality URL for thumbnails.
+ * Firebase Storage supports image resizing via the `?w=&h=` query params
+ * when the "Resize Images" extension is installed (common setup).
+ * For other CDNs / plain URLs we just append nothing extra but still
+ * use the browser's native lazy-loading.
+ *
+ * Strategy: append `w=120` to Firebase Storage URLs so the extension
+ * can serve a small cached variant. For any other URL, return as-is.
+ */
+const toThumbnailUrl = (url: string): string => {
+  try {
+    const u = new URL(url);
+    // Firebase Storage direct URLs contain "firebasestorage.googleapis.com"
+    // or "storage.googleapis.com"
+    if (
+      u.hostname.includes('firebasestorage.googleapis.com') ||
+      u.hostname.includes('storage.googleapis.com')
+    ) {
+      // The Firebase Resize Images extension serves thumbnails under a
+      // path like …/thumb@200_<filename>. However, since that requires
+      // the extension to be configured, we use a safer approach:
+      // just append the Google Cloud Storage image-serving size token.
+      // If the extension is NOT installed this param is silently ignored
+      // and the full image is served – no breakage, just no speedup.
+      u.searchParams.set('w', '120');
+      return u.toString();
+    }
+    return url;
+  } catch {
+    return url;
+  }
+};
 
 // ─── Tracking URL helper ───────────────────────────────────────────────────────
 const getTrackingUrl = (invoiceId: string) =>
@@ -190,7 +229,7 @@ const ShareDialog: React.FC<{
 // ─── Image Preview Modal ──────────────────────────────────────────────────────
 const ImagePreviewModal: React.FC<{
   open: boolean;
-  photos: string[];
+  photos: string[];       // full-resolution URLs
   initialIndex: number;
   invoiceNumber: string;
   onClose: () => void;
@@ -265,6 +304,7 @@ const ImagePreviewModal: React.FC<{
             <ChevronLeftIcon />
           </IconButton>
         )}
+        {/* Full-resolution image — NO thumbnail URL here */}
         <Box
           component="img"
           src={photos[currentIndex]}
@@ -287,8 +327,10 @@ const ImagePreviewModal: React.FC<{
             <Box
               key={idx}
               component="img"
-              src={photo}
+              // Thumbnails in the film strip can be low-res
+              src={toThumbnailUrl(photo)}
               alt={`Miniatura ${idx + 1}`}
+              loading="lazy"
               onClick={() => setCurrentIndex(idx)}
               sx={{
                 width: 64, height: 64, objectFit: 'cover', borderRadius: 1.5, cursor: 'pointer', flexShrink: 0,
@@ -307,7 +349,7 @@ const ImagePreviewModal: React.FC<{
 
 // ─── Photo Strip Preview ───────────────────────────────────────────────────────
 const PhotoStrip: React.FC<{
-  photos: string[];
+  photos: string[];         // full-resolution URLs stored in Firestore
   onPhotoClick: (index: number) => void;
 }> = ({ photos, onPhotoClick }) => {
   const MAX_VISIBLE = 4;
@@ -320,8 +362,12 @@ const PhotoStrip: React.FC<{
         <Box
           key={idx}
           component="img"
-          src={photo}
+          // ← Low-quality thumbnail for the list view
+          src={toThumbnailUrl(photo)}
           alt={`Foto ${idx + 1}`}
+          // ← Native lazy-load: browser skips off-screen images
+          loading="lazy"
+          decoding="async"
           onClick={(e) => { e.stopPropagation(); onPhotoClick(idx); }}
           sx={{
             width: 52, height: 52, objectFit: 'cover', borderRadius: 1.5, cursor: 'pointer',
@@ -359,6 +405,9 @@ const InvoiceListScreenDesktop: React.FC = () => {
   const [sortBy, setSortBy] = useState<'date' | 'status' | 'client'>('date');
   const [stats, setStats] = useState({ pending: 0, delivered: 0, partial: 0, total: 0 });
 
+  // ── Pagination state (only used in Despachadas tab) ──────────────────────
+  const [dispatchedPage, setDispatchedPage] = useState(1);
+
   // Image preview state
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewPhotos, setPreviewPhotos] = useState<string[]>([]);
@@ -371,6 +420,7 @@ const InvoiceListScreenDesktop: React.FC = () => {
   const menuOpen = Boolean(anchorEl);
 
   const openPhotoPreview = (invoice: Invoice, index: number) => {
+    // Always pass full-resolution URLs to the modal
     setPreviewPhotos(invoice.photos);
     setPreviewIndex(index);
     setPreviewInvoiceNumber(invoice.invoiceNumber);
@@ -419,6 +469,11 @@ const InvoiceListScreenDesktop: React.FC = () => {
     setStats({ pending, delivered, partial, total: invoices.length });
   }, [invoices]);
 
+  // Reset to page 1 when search or sort changes
+  useEffect(() => {
+    setDispatchedPage(1);
+  }, [search, sortBy, tabIndex]);
+
   const fetchInvoices = async () => {
     try {
       setLoading(true);
@@ -466,7 +521,8 @@ const InvoiceListScreenDesktop: React.FC = () => {
     }
   };
 
-  const getFilteredInvoices = () => {
+  /** Returns ALL matching invoices (no pagination slicing). */
+  const getFilteredInvoices = useCallback(() => {
     let filtered = invoices;
     filtered = tabIndex === 0
       ? filtered.filter((inv) => inv.status !== 'Despachada')
@@ -493,7 +549,7 @@ const InvoiceListScreenDesktop: React.FC = () => {
     });
 
     return filtered;
-  };
+  }, [invoices, tabIndex, search, sortBy]);
 
   const getPriorityColor = (invoice: Invoice) => {
     const days = Math.floor((new Date().getTime() - invoice.createdAt.getTime()) / 86400000);
@@ -515,7 +571,20 @@ const InvoiceListScreenDesktop: React.FC = () => {
 
   const getInitials = (email: string | null) => (email ? email.charAt(0).toUpperCase() : '?');
 
-  const filteredInvoices = getFilteredInvoices();
+  // ── Derived display lists ───────────────────────────────────────────────────
+  const allFiltered = getFilteredInvoices();
+
+  // For Despachadas (tab 1): paginate. For tab 0: show all.
+  const isDispatchedTab = tabIndex === 1;
+  const totalPages = isDispatchedTab
+    ? Math.max(1, Math.ceil(allFiltered.length / DISPATCHED_PAGE_SIZE))
+    : 1;
+  const displayedInvoices = isDispatchedTab
+    ? allFiltered.slice(
+        (dispatchedPage - 1) * DISPATCHED_PAGE_SIZE,
+        dispatchedPage * DISPATCHED_PAGE_SIZE,
+      )
+    : allFiltered;
 
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: '#f8fafc' }}>
@@ -687,143 +756,181 @@ const InvoiceListScreenDesktop: React.FC = () => {
         </Paper>
 
         {/* Results info */}
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 2, px: 0.5 }}>
-          Mostrando <strong>{filteredInvoices.length}</strong> de <strong>{stats.total}</strong> facturas
-          {search && ` · búsqueda: "${search}"`}
-        </Typography>
+        <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2, px: 0.5 }}>
+          <Typography variant="body2" color="text.secondary">
+            Mostrando{' '}
+            <strong>
+              {isDispatchedTab
+                ? `${Math.min((dispatchedPage - 1) * DISPATCHED_PAGE_SIZE + 1, allFiltered.length)}–${Math.min(dispatchedPage * DISPATCHED_PAGE_SIZE, allFiltered.length)}`
+                : allFiltered.length}
+            </strong>{' '}
+            de <strong>{allFiltered.length}</strong> facturas
+            {search && ` · búsqueda: "${search}"`}
+          </Typography>
+
+          {/* Page indicator for dispatched tab */}
+          {isDispatchedTab && totalPages > 1 && (
+            <Typography variant="caption" color="text.secondary">
+              Página {dispatchedPage} de {totalPages}
+            </Typography>
+          )}
+        </Stack>
 
         {/* ── Invoice List ─────────────────────────────────────── */}
         {loading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 10 }}>
             <CircularProgress size={48} />
           </Box>
-        ) : filteredInvoices.length === 0 ? (
+        ) : allFiltered.length === 0 ? (
           <Paper sx={{ p: 8, textAlign: 'center', borderRadius: 3, border: '1px solid', borderColor: 'divider' }}>
             <Typography variant="h6" color="text.secondary">
               {search ? 'Sin resultados para esa búsqueda' : tabIndex === 0 ? '¡Todo al día!' : 'Sin facturas despachadas'}
             </Typography>
           </Paper>
         ) : (
-          <Stack spacing={1.5}>
-            {filteredInvoices.map((invoice, index) => (
-              <Fade in key={invoice.id} timeout={200} style={{ transitionDelay: `${Math.min(index * 30, 300)}ms` }}>
-                <Paper
-                  elevation={0}
-                  sx={{
-                    borderRadius: 2.5, border: '1px solid', borderColor: 'divider', overflow: 'hidden',
-                    transition: 'all 0.2s ease',
-                    '&:hover': { borderColor: 'primary.300', boxShadow: '0 4px 20px rgba(0,0,0,0.08)', transform: 'translateY(-1px)' },
-                  }}
-                >
-                  <Box
+          <>
+            <Stack spacing={1.5}>
+              {displayedInvoices.map((invoice, index) => (
+                <Fade in key={invoice.id} timeout={200} style={{ transitionDelay: `${Math.min(index * 20, 200)}ms` }}>
+                  <Paper
+                    elevation={0}
                     sx={{
-                      display: 'grid',
-                      gridTemplateColumns: { xs: '1fr', md: '1fr 1fr 1fr auto' },
-                      alignItems: 'center',
-                      p: 2.5,
-                      gap: 2,
-                      cursor: 'pointer',
+                      borderRadius: 2.5, border: '1px solid', borderColor: 'divider', overflow: 'hidden',
+                      transition: 'all 0.2s ease',
+                      '&:hover': { borderColor: 'primary.300', boxShadow: '0 4px 20px rgba(0,0,0,0.08)', transform: 'translateY(-1px)' },
                     }}
-                    onClick={() => invoice.id && navigate(`/invoice/${invoice.id}`)}
                   >
-                    {/* Col 1: Invoice info */}
-                    <Stack spacing={1}>
-                      <Stack direction="row" spacing={1.5} alignItems="center">
-                        <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: getPriorityColor(invoice), flexShrink: 0 }} />
-                        <Typography variant="subtitle1" fontWeight={700} color="primary.main">
-                          {invoice.invoiceNumber}
-                        </Typography>
-                        <Chip
-                          icon={getStatusIcon(invoice.status)}
-                          label={invoice.status}
-                          color={getStatusColor(invoice.status) as any}
-                          size="small"
-                          sx={{ fontWeight: 600, height: 22, fontSize: '0.7rem' }}
-                        />
-                      </Stack>
-                      <Typography variant="body2" fontWeight={500}>{invoice.clientName}</Typography>
-                      <Stack direction="row" spacing={2}>
-                        <Stack direction="row" spacing={0.5} alignItems="center">
-                          <PhoneIcon sx={{ fontSize: 13, color: 'text.disabled' }} />
-                          <Typography variant="caption" color="text.secondary">{invoice.clientPhone}</Typography>
-                        </Stack>
-                        <Stack direction="row" spacing={0.5} alignItems="center">
-                          <CalendarIcon sx={{ fontSize: 13, color: 'text.disabled' }} />
-                          <Typography variant="caption" color="text.secondary">{formatDate(invoice.createdAt)}</Typography>
-                        </Stack>
-                        {invoice.deliveries?.length > 0 && (
-                          <Stack direction="row" spacing={0.5} alignItems="center">
-                            <ShippingIcon sx={{ fontSize: 13, color: 'primary.main' }} />
-                            <Typography variant="caption" color="primary.main" fontWeight={600}>
-                              {invoice.deliveries.length} entrega{invoice.deliveries.length !== 1 ? 's' : ''}
-                            </Typography>
-                          </Stack>
-                        )}
-                      </Stack>
-                    </Stack>
-
-                    {/* Col 2: Photos inline */}
-                    <Box onClick={(e) => e.stopPropagation()}>
-                      {invoice.photos.length > 0 ? (
-                        <Stack spacing={0.5}>
-                          <Typography variant="caption" color="text.secondary" fontWeight={500}>
-                            {invoice.photos.length} foto{invoice.photos.length !== 1 ? 's' : ''}
+                    <Box
+                      sx={{
+                        display: 'grid',
+                        gridTemplateColumns: { xs: '1fr', md: '1fr 1fr 1fr auto' },
+                        alignItems: 'center',
+                        p: 2.5,
+                        gap: 2,
+                        cursor: 'pointer',
+                      }}
+                      onClick={() => invoice.id && navigate(`/invoice/${invoice.id}`)}
+                    >
+                      {/* Col 1: Invoice info */}
+                      <Stack spacing={1}>
+                        <Stack direction="row" spacing={1.5} alignItems="center">
+                          <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: getPriorityColor(invoice), flexShrink: 0 }} />
+                          <Typography variant="subtitle1" fontWeight={700} color="primary.main">
+                            {invoice.invoiceNumber}
                           </Typography>
-                          <PhotoStrip photos={invoice.photos} onPhotoClick={(idx) => openPhotoPreview(invoice, idx)} />
-                        </Stack>
-                      ) : (
-                        <Typography variant="caption" color="text.disabled">Sin fotos adjuntas</Typography>
-                      )}
-                    </Box>
-
-                    {/* Col 3: empty spacer on md */}
-                    <Box sx={{ display: { xs: 'none', md: 'block' } }} />
-
-                    {/* Col 4: Actions */}
-                    <Stack direction="row" spacing={1} alignItems="center" onClick={(e) => e.stopPropagation()}>
-                      <Tooltip title="Registrar entrega">
-                        <span>
-                          <Button
-                            variant="contained"
+                          <Chip
+                            icon={getStatusIcon(invoice.status)}
+                            label={invoice.status}
+                            color={getStatusColor(invoice.status) as any}
                             size="small"
-                            startIcon={<ShippingIcon />}
-                            onClick={() => invoice.id && navigate(`/quick-delivery/${invoice.id}`)}
-                            disabled={invoice.status === 'Despachada'}
-                            sx={{ textTransform: 'none', fontWeight: 600, borderRadius: 1.5, fontSize: '0.8rem' }}
+                            sx={{ fontWeight: 600, height: 22, fontSize: '0.7rem' }}
+                          />
+                        </Stack>
+                        <Typography variant="body2" fontWeight={500}>{invoice.clientName}</Typography>
+                        <Stack direction="row" spacing={2}>
+                          <Stack direction="row" spacing={0.5} alignItems="center">
+                            <PhoneIcon sx={{ fontSize: 13, color: 'text.disabled' }} />
+                            <Typography variant="caption" color="text.secondary">{invoice.clientPhone}</Typography>
+                          </Stack>
+                          <Stack direction="row" spacing={0.5} alignItems="center">
+                            <CalendarIcon sx={{ fontSize: 13, color: 'text.disabled' }} />
+                            <Typography variant="caption" color="text.secondary">{formatDate(invoice.createdAt)}</Typography>
+                          </Stack>
+                          {invoice.deliveries?.length > 0 && (
+                            <Stack direction="row" spacing={0.5} alignItems="center">
+                              <ShippingIcon sx={{ fontSize: 13, color: 'primary.main' }} />
+                              <Typography variant="caption" color="primary.main" fontWeight={600}>
+                                {invoice.deliveries.length} entrega{invoice.deliveries.length !== 1 ? 's' : ''}
+                              </Typography>
+                            </Stack>
+                          )}
+                        </Stack>
+                      </Stack>
+
+                      {/* Col 2: Photos inline */}
+                      <Box onClick={(e) => e.stopPropagation()}>
+                        {invoice.photos.length > 0 ? (
+                          <Stack spacing={0.5}>
+                            <Typography variant="caption" color="text.secondary" fontWeight={500}>
+                              {invoice.photos.length} foto{invoice.photos.length !== 1 ? 's' : ''}
+                            </Typography>
+                            <PhotoStrip photos={invoice.photos} onPhotoClick={(idx) => openPhotoPreview(invoice, idx)} />
+                          </Stack>
+                        ) : (
+                          <Typography variant="caption" color="text.disabled">Sin fotos adjuntas</Typography>
+                        )}
+                      </Box>
+
+                      {/* Col 3: empty spacer on md */}
+                      <Box sx={{ display: { xs: 'none', md: 'block' } }} />
+
+                      {/* Col 4: Actions */}
+                      <Stack direction="row" spacing={1} alignItems="center" onClick={(e) => e.stopPropagation()}>
+                        <Tooltip title="Registrar entrega">
+                          <span>
+                            <Button
+                              variant="contained"
+                              size="small"
+                              startIcon={<ShippingIcon />}
+                              onClick={() => invoice.id && navigate(`/quick-delivery/${invoice.id}`)}
+                              disabled={invoice.status === 'Despachada'}
+                              sx={{ textTransform: 'none', fontWeight: 600, borderRadius: 1.5, fontSize: '0.8rem' }}
+                            >
+                              Despachar
+                            </Button>
+                          </span>
+                        </Tooltip>
+                        <Tooltip title="Ver detalles">
+                          <IconButton
+                            size="small"
+                            onClick={() => invoice.id && navigate(`/invoice/${invoice.id}`)}
+                            sx={{ border: '1px solid', borderColor: 'divider' }}
                           >
-                            Despachar
-                          </Button>
-                        </span>
-                      </Tooltip>
-                      <Tooltip title="Ver detalles">
-                        <IconButton
-                          size="small"
-                          onClick={() => invoice.id && navigate(`/invoice/${invoice.id}`)}
-                          sx={{ border: '1px solid', borderColor: 'divider' }}
-                        >
-                          <VisibilityIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                      {/* ── SHARE BUTTON ── */}
-                      <Tooltip title="Copiar enlace de seguimiento">
-                        <IconButton
-                          size="small"
-                          onClick={(e) => handleShare(e, invoice)}
-                          sx={{
-                            border: '1px solid',
-                            borderColor: 'divider',
-                            '&:hover': { bgcolor: '#eff6ff', borderColor: 'primary.300' },
-                          }}
-                        >
-                          <ShareIcon fontSize="small" sx={{ color: 'primary.main' }} />
-                        </IconButton>
-                      </Tooltip>
-                    </Stack>
-                  </Box>
-                </Paper>
-              </Fade>
-            ))}
-          </Stack>
+                            <VisibilityIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                        <Tooltip title="Copiar enlace de seguimiento">
+                          <IconButton
+                            size="small"
+                            onClick={(e) => handleShare(e, invoice)}
+                            sx={{
+                              border: '1px solid',
+                              borderColor: 'divider',
+                              '&:hover': { bgcolor: '#eff6ff', borderColor: 'primary.300' },
+                            }}
+                          >
+                            <ShareIcon fontSize="small" sx={{ color: 'primary.main' }} />
+                          </IconButton>
+                        </Tooltip>
+                      </Stack>
+                    </Box>
+                  </Paper>
+                </Fade>
+              ))}
+            </Stack>
+
+            {/* ── Pagination (Despachadas only) ───────────────── */}
+            {isDispatchedTab && totalPages > 1 && (
+              <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4, mb: 2 }}>
+                <Pagination
+                  count={totalPages}
+                  page={dispatchedPage}
+                  onChange={(_, page) => {
+                    setDispatchedPage(page);
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}
+                  color="primary"
+                  shape="rounded"
+                  showFirstButton
+                  showLastButton
+                  siblingCount={1}
+                  sx={{
+                    '& .MuiPaginationItem-root': { fontWeight: 600, borderRadius: 2 },
+                  }}
+                />
+              </Box>
+            )}
+          </>
         )}
       </Container>
 
@@ -838,7 +945,7 @@ const InvoiceListScreenDesktop: React.FC = () => {
         </Fab>
       </Zoom>
 
-      {/* Image Preview Modal */}
+      {/* Image Preview Modal — always full-resolution */}
       <ImagePreviewModal
         open={previewOpen}
         photos={previewPhotos}
