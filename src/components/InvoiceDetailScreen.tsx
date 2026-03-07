@@ -480,6 +480,8 @@ const InvoiceDetailScreenDesktop: React.FC = () => {
   }
 
   const totalPhotos = invoice.photos.length + (invoice.deliveries?.reduce((acc, d) => acc + (d.photos?.length || 0), 0) || 0);
+  const hasDeliveries = invoice.deliveries && invoice.deliveries.length > 0;
+  const canMarkAsDispatched = invoice.status === 'Despachada' || hasDeliveries;
 
   return (
     <Container maxWidth="xl" sx={{ py: 4 }}>
@@ -511,16 +513,20 @@ const InvoiceDetailScreenDesktop: React.FC = () => {
             color={getStatusColor(invoice.status) as any}
             sx={{ fontWeight: 700, fontSize: '0.85rem', height: 32 }}
           />
-          <Button
-            variant={invoice.status === 'Despachada' ? 'outlined' : 'contained'}
-            color={invoice.status === 'Despachada' ? 'inherit' : 'success'}
-            startIcon={updating ? <CircularProgress size={16} /> : <CheckIcon />}
-            onClick={handleStatusChange}
-            disabled={updating}
-            sx={{ textTransform: 'none', fontWeight: 600 }}
-          >
-            {invoice.status === 'Despachada' ? 'Marcar como Pendiente' : 'Marcar como Despachada'}
-          </Button>
+          <Tooltip title={!canMarkAsDispatched ? 'Debes registrar al menos una entrega antes de marcar como despachada' : ''}>
+            <span>
+              <Button
+                variant={invoice.status === 'Despachada' ? 'outlined' : 'contained'}
+                color={invoice.status === 'Despachada' ? 'inherit' : 'success'}
+                startIcon={updating ? <CircularProgress size={16} /> : <CheckIcon />}
+                onClick={handleStatusChange}
+                disabled={updating || !canMarkAsDispatched}
+                sx={{ textTransform: 'none', fontWeight: 600 }}
+              >
+                {invoice.status === 'Despachada' ? 'Marcar como Pendiente' : 'Marcar como Despachada'}
+              </Button>
+            </span>
+          </Tooltip>
           <Button
             variant="contained"
             startIcon={<ArrowForwardIcon />}
