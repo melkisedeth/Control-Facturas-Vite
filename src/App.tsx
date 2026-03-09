@@ -47,7 +47,7 @@ function App() {
     <ErrorBoundary>
       <ThemeProvider theme={theme}>
         <CssBaseline />
-        <Router basename="/Control-Facturas-Vite">
+        <Router>
           <div className="min-h-screen bg-gray-50">
             <Routes>
               {/* ── Public route — no auth required ── */}
