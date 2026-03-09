@@ -873,6 +873,7 @@ const InvoiceDetailScreenDesktop: React.FC = () => {
         onNavigate={setLightboxIndex}
       />
 
+
       {/* ── Snackbar enlace copiado ────────────────────────────── */}
       <Snackbar
         open={snackCopied}
