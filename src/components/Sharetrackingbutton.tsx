@@ -34,7 +34,7 @@ interface ShareTrackingButtonProps {
 const BASE_URL = `${window.location.origin}${window.location.pathname.replace(/\/[^/]*$/, '')}`;
 
 export const getTrackingUrl = (invoiceId: string) =>
-  `${window.location.origin}/Control-Facturas-Vite/tracking/${invoiceId}`;
+  `${window.location.origin}/tracking/${invoiceId}`;
 
 const ShareTrackingButton: React.FC<ShareTrackingButtonProps> = ({
   invoiceId,
