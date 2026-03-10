@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "homepage": "https://melkisedeth.github.io/Control-Facturas-Vite/",
+  "homepage": "https://pedidosferrerenergy.com",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
