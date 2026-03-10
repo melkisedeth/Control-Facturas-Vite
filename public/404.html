@@ -6,7 +6,7 @@
     <script>
       // Guarda la ruta completa en sessionStorage y redirige al index
       var path = window.location.pathname;
-      var base = '/Control-Facturas-Vite';
+      var base = '/';
       var route = path.replace(base, '') || '/';
       sessionStorage.setItem('redirect', route + window.location.search);
       window.location.replace(base + '/');

@@ -67,7 +67,7 @@ import {
 
 // ─── Tracking URL helper ───────────────────────────────────────────────────────
 const getTrackingUrl = (invoiceId: string) =>
-  `${window.location.origin}/Control-Facturas-Vite/tracking/${invoiceId}`;
+  `${window.location.origin}/tracking/${invoiceId}`;
 
 // ─── Share Dialog ──────────────────────────────────────────────────────────────
 const ShareDialog: React.FC<{
